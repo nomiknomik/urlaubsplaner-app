@@ -52,13 +52,15 @@ header h1 small{font-weight:400;color:var(--text-schwach);font-size:13px;margin-
 
 /* ---------- Werkzeugleiste ---------- */
 #werkzeuge{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  padding:10px 20px;background:var(--flaeche);border-bottom:1px solid var(--linie);
+  display:flex;align-items:center;gap:8px;
+  padding:8px 20px;background:var(--flaeche);border-bottom:1px solid var(--linie);
 }
 #werkzeuge .label{color:var(--text-schwach);margin-right:4px}
+#pinselListe{flex:1 1 auto;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+#pinselListe .label{margin-left:6px !important;margin-right:0}
 .pinsel{
   display:inline-flex;align-items:center;gap:7px;cursor:pointer;
-  border:1px solid var(--linie-stark);border-radius:20px;padding:5px 13px 5px 9px;
+  border:1px solid var(--linie-stark);border-radius:20px;padding:4px 11px 4px 8px;
   background:var(--flaeche);user-select:none;
 }
 .pinsel input{position:absolute;opacity:0;width:0;height:0}
@@ -129,7 +131,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
   color:var(--text-schwach);margin:0 0 11px;font-weight:600;
 }
 .person{display:flex;align-items:center;gap:8px;margin-bottom:11px}
-.person .punkt{width:6px;height:16px;flex:0 0 auto;border-radius:3px}
+.person .punkt{width:6px;height:16px;flex:0 0 auto;border-radius:3px;background:var(--f)}
 .person .name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .person .zahl{font-variant-numeric:tabular-nums;white-space:nowrap}
 .person .zahl b{font-size:15px}
@@ -162,7 +164,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
 /* ---------- Schalter ---------- */
 .schalter{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;
   font-size:13px;color:var(--text-schwach)}
-#werkzeuge .rechts{margin-left:auto;display:flex;align-items:center;gap:14px}
+#werkzeuge .rechts{margin-left:auto;display:flex;align-items:center;gap:14px;flex:0 0 auto}
 
 /* ---------- Notizen im Jahresraster ---------- */
 /* Die Beschriftung eines Blocks läuft senkrecht über seine ganze Höhe statt
@@ -178,11 +180,15 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
   overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
 }
 /* Ein einzelner Tag ist nur 26 px hoch — senkrecht blieben davon drei Zeichen.
-   Solche Notizen laufen weiter quer durch die Zelle, wo rund 45 px Platz sind. */
+   Solche Notizen laufen quer über die ganze Zelle, auch über die Balken, und
+   brechen auf zwei Zeilen um. Ein weißer Schein hält sie auf den Balken lesbar. */
 .tag .notiz.quer{
   writing-mode:horizontal-tb;
-  left:calc(var(--feld) + 3px);right:9px;width:auto;top:0;bottom:0;
-  line-height:26px;text-align:right;font-size:9.5px;
+  left:2px;right:2px;width:auto;top:50%;bottom:auto;transform:translateY(-50%);
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+  white-space:normal;overflow-wrap:anywhere;
+  line-height:11px;max-height:22px;text-align:center;font-size:10px;
+  text-shadow:0 0 2px #fff,0 0 2px #fff,0 0 3px #fff;
 }
 .tag.mit-notiz .wt{display:none}
 
@@ -284,18 +290,45 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    weicht zuerst die Ortszeile — sie ist Schmuck, die Zahlen sind es nicht.
    Sonst bricht der Kopf auf zwei Zeilen um und nimmt dem Raster die Höhe. */
 @media screen and (max-width:1500px){ #kopfOrt{display:none} }
-/* Bilanz im Kopf: sie klebt mit der Werkzeugleiste oben und bleibt damit
-   auch beim Malen weit unten im Jahr sichtbar. */
-#kopfBilanz{display:flex;align-items:center;gap:16px;font-size:13px}
-#kopfBilanz .kb{display:flex;align-items:center;gap:6px;white-space:nowrap}
-#kopfBilanz .punkt{width:5px;height:16px;border-radius:3px;background:var(--f)}
-#kopfBilanz b{font-size:15px;font-variant-numeric:tabular-nums}
-#kopfBilanz .von{color:var(--text-schwach);font-variant-numeric:tabular-nums}
-#kopfBilanz .kb.ueber b,#kopfBilanz .kb.ueber .von{color:var(--warn)}
+/* Zähler im Malknopf: offene Urlaubstage einer Person bzw. unverplante
+   betreuungspflichtige Tage am Schulfrei-Knopf. Er klebt mit der
+   Werkzeugleiste oben und bleibt beim Malen weit unten im Jahr sichtbar. */
+.pinsel .zahl{
+  font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;
+  background:#EFEBE3;border-radius:9px;padding:0 6px;min-width:20px;text-align:center;
+}
+.pinsel .zahl.ueber{background:var(--warn-bg);color:var(--warn)}
+
+/* ---------- Reiter Planer / Einstellungen ---------- */
+.reiter{display:flex;gap:4px}
+.reiter button{border:1px solid transparent;background:none;border-radius:6px;
+  padding:5px 12px;cursor:pointer;color:var(--text-schwach)}
+.reiter button:hover{background:#F3F0EA}
+.reiter button[aria-selected=true]{border-color:var(--linie-stark);color:var(--text);
+  font-weight:600;background:var(--bg)}
+#einstellungen{
+  display:none;padding:20px;max-width:1500px;gap:14px;align-items:start;
+  grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+}
+@media screen{
+  body.einst #einstellungen{display:grid}
+  body.einst #planer,body.einst #werkzeuge,body.einst #legende{display:none}
+}
+.anspruch{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.anspruch .punkt{width:6px;height:16px;flex:0 0 auto;border-radius:3px;background:var(--f)}
+.anspruch .name{flex:1 1 auto}
+.anspruch input{
+  width:60px;padding:2px 4px;border:1px solid var(--linie-stark);
+  border-radius:4px;text-align:right;background:var(--bg);
+}
 
 /* Zustandssymbol des Abgleichs im Kopf — dieselbe Sprache wie die Hinweise:
    Farbe plus Zeichen, nie Farbe allein. */
 .btn.ikon{padding:4px 9px;font-size:15px;line-height:1.2}
+/* Version und Update in einem Knopf: zeigt die laufende Version, wird grün,
+   sobald auf dem Server eine neuere liegt. */
+#btnVersion{font-size:12.5px;color:var(--text-schwach);font-variant-numeric:tabular-nums}
+#btnVersion.neu{color:#fff;background:var(--akzent);border-color:var(--akzent);font-weight:600}
 #syncBtn[data-st=ok]{color:var(--akzent);border-color:var(--akzent)}
 #syncBtn[data-st=wait]{color:#8A6D1F;border-color:#D9C27A}
 #syncBtn[data-st=busy]{color:var(--text-schwach)}
@@ -338,9 +371,9 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
   .nur-druck{display:inline}
 
   /* Bedienelemente haben auf Papier nichts zu suchen. */
-  #werkzeuge,#notizBox,#speicherWarnung,.kopf-aktionen,#karteSpeicher,
+  #werkzeuge,#notizBox,#speicherWarnung,.kopf-aktionen,#karteSpeicher,#einstellungen,.reiter,
   #karteFerien,#karteSchulfrei,#karteReisen,#karteTermine,#karteSync,#karteHaushalt,
-  #legendeHinweis,#btnRueckgaengig,#syncBtn,
+  #legendeHinweis,#btnRueckgaengig,#syncBtn,#btnVersion,
   #ferienForm,#schulfreiForm,.sf-weg,#jahrWahl,.nicht-drucken{display:none !important}
 
   /* main löst sich auf, damit Raster, Seitenleiste und Legende direkt im
@@ -369,7 +402,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
   .tag{height:5.6mm}
   .tag .wt{font-size:7px}
   .tag .notiz{font-size:6.5px;line-height:9px;width:9px;right:6px;top:1px}
-  .tag .notiz.quer{line-height:5.6mm;left:calc(var(--feld) + 2px);right:5px;font-size:6.5px}
+  .tag .notiz.quer{line-height:7px;max-height:14px;left:1px;right:1px;font-size:6.5px}
   .tag .terminspur{width:5px}
   .tag .terminspur i{width:3px;right:1px}
   .tag.heute{outline:none}
@@ -427,9 +460,13 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
     <select id="jahrWahl" title="Planjahr wechseln"></select>
     <span class="nur-druck" id="kopfJahrDruck">2027</span><small id="kopfOrt"></small>
   </h1>
-  <span id="kopfBilanz" class="nicht-drucken"></span>
+  <nav class="reiter nicht-drucken" role="tablist">
+    <button type="button" role="tab" data-reiter="planer" aria-selected="true">Planer</button>
+    <button type="button" role="tab" data-reiter="einst" aria-selected="false">Einstellungen</button>
+  </nav>
   <span class="nur-druck" id="kopfDruckDatum"></span>
   <div class="kopf-aktionen">
+    <button class="btn" id="btnVersion" title="Auf neue Version prüfen und neu laden"></button>
     <button class="btn ikon" id="syncBtn" data-st="off" title="Online-Abgleich nicht eingerichtet">☁</button>
     <button class="btn" id="btnRueckgaengig" title="Letzte Änderung zurücknehmen (Strg+Z)" disabled>↶ Rückgängig</button>
     <button class="btn" id="btnDruck" title="Öffnet den Druckdialog — dort „Hintergrundgrafiken“ aktivieren">PDF / Drucken</button>
@@ -440,7 +477,6 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
 </header>
 
 <div id="werkzeuge">
-  <span class="label">Malen mit:</span>
   <span id="pinselListe"></span>
   <span class="rechts">
     <label class="schalter" title="Lücken im Raster rot umranden und schraffieren">
@@ -451,33 +487,10 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
 
 </div><!-- /kopfbereich -->
 
-<main>
+<main id="planer">
   <div id="rasterBereich"><div id="raster"></div></div>
 
   <aside id="seitenleiste">
-    <section class="karte">
-      <h2>Bilanz</h2>
-      <div id="bilanzPersonen"></div>
-      <hr class="trenner">
-      <div class="zeile"><span>Betreuungspflichtige Werktage</span><span id="zahlFerienwerktage">–</span></div>
-      <div class="zeile"><span>davon abgedeckt</span><span id="zahlAbgedeckt">–</span></div>
-      <div class="zeile" id="zeileLuecken"><span>⚠ Lücken</span><span id="zahlLuecken">–</span></div>
-      <hr class="trenner">
-      <div class="zeile"><span>Gemeinsame Urlaubstage</span><span id="zahlDoppel">–</span></div>
-      <div class="zeile"><span>Budget dafür</span><span id="zahlBudget">–</span></div>
-      <div class="zeile"><span>Urlaubstage gesamt</span><span id="zahlAnspruchGesamt">–</span></div>
-      <p class="fussnote">
-        Verbraucht wird ein Urlaubstag nur an Werktagen Mo–Fr ohne gesetzlichen
-        Feiertag. Einträge am Wochenende oder Feiertag bleiben sichtbar, zählen
-        aber nicht.
-      </p>
-    </section>
-
-    <section class="karte">
-      <h2>Hinweise</h2>
-      <ul id="hinweisListe"></ul>
-    </section>
-
     <section class="karte" id="karteReisen">
       <h2>Reisen und Urlaubsblöcke</h2>
       <ul class="sf-liste" id="reiseListe"></ul>
@@ -507,6 +520,56 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
       </p>
     </section>
 
+    <section class="karte" id="karteSchulfrei">
+      <h2>Zusätzliche schulfreie Tage</h2>
+      <ul class="sf-liste" id="schulfreiListe"></ul>
+      <div id="schulfreiForm">
+        <div class="reihe">
+          <input type="date" id="schulfreiDatum">
+          <input type="text" id="schulfreiName" placeholder="Bezeichnung" maxlength="40">
+        </div>
+        <button class="btn mini" id="btnSchulfrei">Hinzufügen</button>
+      </div>
+      <p class="fussnote">
+        Für bewegliche Ferientage, Pädagogischen Tag oder Fasnet. Selbst erfasste
+        Tage lassen sich wieder entfernen, eingebaute Termine nicht.
+      </p>
+    </section>
+
+    <section class="karte">
+      <h2>Bilanz</h2>
+      <div id="bilanzPersonen"></div>
+      <hr class="trenner">
+      <div class="zeile"><span>Betreuungspflichtige Werktage</span><span id="zahlFerienwerktage">–</span></div>
+      <div class="zeile"><span>davon abgedeckt</span><span id="zahlAbgedeckt">–</span></div>
+      <div class="zeile" id="zeileLuecken"><span>⚠ Lücken</span><span id="zahlLuecken">–</span></div>
+      <hr class="trenner">
+      <div class="zeile"><span>Gemeinsame Urlaubstage</span><span id="zahlDoppel">–</span></div>
+      <div class="zeile"><span>Budget dafür</span><span id="zahlBudget">–</span></div>
+      <div class="zeile"><span>Urlaubstage gesamt</span><span id="zahlAnspruchGesamt">–</span></div>
+      <p class="fussnote">
+        Verbraucht wird ein Urlaubstag nur an Werktagen Mo–Fr ohne gesetzlichen
+        Feiertag. Einträge am Wochenende oder Feiertag bleiben sichtbar, zählen
+        aber nicht.
+      </p>
+    </section>
+
+    <section class="karte">
+      <h2>Hinweise</h2>
+      <ul id="hinweisListe"></ul>
+    </section>
+
+  </aside>
+</main>
+
+<main id="einstellungen">
+    <section class="karte" id="karteAnspruch">
+      <h2>Urlaubstage <span id="anspruchJahr"></span></h2>
+      <div id="anspruchListe"></div>
+      <p class="fussnote">Anspruch je Person für das gewählte Planjahr. Die noch
+        offenen Tage stehen beim Malen direkt im Knopf der Person.</p>
+    </section>
+
     <section class="karte" id="karteFerien">
       <h2>Ferienzeiten <span id="ferienJahr"></span></h2>
       <p class="fussnote" id="ferienStatus"></p>
@@ -529,22 +592,6 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
           Abruf erneuern; selbst erfasste bleiben dabei unangetastet.
         </p>
       </div>
-    </section>
-
-    <section class="karte" id="karteSchulfrei">
-      <h2>Zusätzliche schulfreie Tage</h2>
-      <ul class="sf-liste" id="schulfreiListe"></ul>
-      <div id="schulfreiForm">
-        <div class="reihe">
-          <input type="date" id="schulfreiDatum">
-          <input type="text" id="schulfreiName" placeholder="Bezeichnung" maxlength="40">
-        </div>
-        <button class="btn mini" id="btnSchulfrei">Hinzufügen</button>
-      </div>
-      <p class="fussnote">
-        Für bewegliche Ferientage, Pädagogischen Tag oder Fasnet. Selbst erfasste
-        Tage lassen sich wieder entfernen, eingebaute Termine nicht.
-      </p>
     </section>
 
     <section class="karte" id="karteHaushalt">
@@ -597,7 +644,6 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
         und als echte Sicherung dient die Backup-Datei.
       </p>
     </section>
-  </aside>
 </main>
 
 <section id="legende">
@@ -632,6 +678,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
+const APP_VERSION = "3.1";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -969,6 +1016,17 @@ function brueckentage(){
 /* ------------------------------------------------------------
    Besondere Termine (Fortbildung, Kongress, Dienstreise)
    ------------------------------------------------------------ */
+/* Termine tragen die beiden Personen und das Kind (Klassenfahrt, Arzttermin).
+   Das Kind ist keine Mal-Ressource; sein Termin ist ein reiner Vermerk. */
+const KIND_FARBE = "#5E6E85";
+function terminTraeger(){
+  const k = zustand.settings.kind;
+  return zustand.personen.concat([{ id:"kind", farbe:KIND_FARBE,
+    name: k && k !== "das Kind" ? k : "Kind" }]);
+}
+function traegerFinden(id){
+  return terminTraeger().find(t => t.id === id) || null;
+}
 function termineAm(datum){
   const t = tagIndex[datum];
   return (t && t.termine.length) ? t.termine : [];
@@ -997,7 +1055,7 @@ function terminKonflikt(datum){
 function terminLaeufe(){
   const j = jahrSicherstellen(zustand.settings.aktivesJahr);
   const raus = [];
-  zustand.personen.forEach(person => {
+  terminTraeger().forEach(person => {
     const eigene = j.termine.filter(e => e.person === person.id && tagIndex[e.datum]);
     laeufe(eigene.map(e => e.datum)).forEach(lauf => {
       raus.push({
@@ -1411,52 +1469,58 @@ function pinselZeichnen(){
     l.innerHTML =
       '<input type="radio" name="pinsel" value="' + r.id + '">' +
       '<span class="punkt" style="background:' + pastell(r.farbe, 0.62) + '"></span>' +
-      '<span></span>';
-    l.querySelector("span:last-child").textContent = r.name;
+      '<span class="name"></span>';
+    l.querySelector(".name").textContent = r.name;
+    // Personen tragen ihre noch offenen Urlaubstage im Knopf.
+    if(zustand.personen.indexOf(r) !== -1){
+      const z = document.createElement("span");
+      z.className = "zahl";
+      z.dataset.person = r.id;
+      l.appendChild(z);
+    }
     elPinsel.appendChild(l);
+  };
+  const label = text => {
+    const sp = document.createElement("span");
+    sp.className = "label";
+    sp.style.marginLeft = "8px";
+    sp.textContent = text;
+    elPinsel.appendChild(sp);
   };
   zustand.personen.forEach(knopf);
   // Betreuungsquellen malen sich wie Personen, verbrauchen aber keinen Urlaub.
   if(zustand.betreuung.length){
-    const beschriftung = document.createElement("span");
-    beschriftung.className = "label";
-    beschriftung.style.marginLeft = "8px";
-    beschriftung.textContent = "Betreuung:";
-    elPinsel.appendChild(beschriftung);
+    label("Betreuung:");
     zustand.betreuung.forEach(knopf);
   }
   // Schulfreie Tage lassen sich genauso malen wie Urlaub — zunächst ohne
-  // Bezeichnung, benannt wird später in der Seitenleiste.
-  const sf = document.createElement("span");
-  sf.className = "label";
-  sf.style.marginLeft = "8px";
-  sf.textContent = "Kalender:";
-  elPinsel.appendChild(sf);
+  // Bezeichnung, benannt wird später in der Seitenleiste. Der Zähler nennt die
+  // betreuungspflichtigen Tage, die noch niemand abdeckt.
+  label("Kalender:");
   const f = document.createElement("label");
   f.className = "pinsel ferien";
   f.title = "Schulfreie Tage malen — ohne Bezeichnung, benennbar in der Seitenleiste. " +
             "Noch einmal darüberfahren nimmt sie wieder weg.";
   f.innerHTML =
     '<input type="radio" name="pinsel" value="ferien">' +
-    '<span class="punkt"></span><span>Schulfrei</span>';
+    '<span class="punkt"></span><span>Schulfrei</span><span class="zahl" data-luecken="1"></span>';
   elPinsel.appendChild(f);
 
-  // Termine gehören einer Person — gemalt wird für die zuletzt gewählte.
-  if(!zustand.personen.some(p => p.id === terminPerson) && zustand.personen[0]){
-    terminPerson = zustand.personen[0].id;
-  }
-  const tp = ressourceFinden(terminPerson);
-  const tl = document.createElement("label");
-  tl.className = "pinsel termin";
-  tl.title = "Fortbildung, Kongress, Dienstreise für " + (tp ? tp.name : "") +
-             " — an diesen Tagen ist kein Urlaub möglich. Erst eine Person wählen, " +
-             "dann diesen Pinsel: der Termin gehört dann ihr.";
-  tl.innerHTML =
-    '<input type="radio" name="pinsel" value="termin">' +
-    '<span class="punkt"></span><span></span>';
-  if(tp) farbeSetzen(tl.querySelector(".punkt"), tp.farbe);
-  tl.querySelector("span:last-child").textContent = "Termin" + (tp ? ": " + tp.name : "");
-  elPinsel.appendChild(tl);
+  // Ein Termin-Knopf je Träger — kein Umweg mehr über die Personenwahl.
+  label("Termin:");
+  terminTraeger().forEach(tp => {
+    const tl = document.createElement("label");
+    tl.className = "pinsel termin";
+    tl.title = "Termin für " + tp.name + (tp.id === "kind"
+      ? " (Klassenfahrt, Arzttermin …) — reiner Vermerk."
+      : " (Fortbildung, Kongress, Dienstreise) — an diesen Tagen ist kein Urlaub möglich.");
+    tl.innerHTML =
+      '<input type="radio" name="pinsel" value="termin:' + tp.id + '">' +
+      '<span class="punkt"></span><span></span>';
+    farbeSetzen(tl.querySelector(".punkt"), tp.farbe);
+    tl.querySelector("span:last-child").textContent = tp.name;
+    elPinsel.appendChild(tl);
+  });
 
   const r = document.createElement("label");
   r.className = "pinsel radierer";
@@ -1465,20 +1529,44 @@ function pinselZeichnen(){
     '<span class="punkt"></span><span>Radieren</span>';
   elPinsel.appendChild(r);
 
+  if(!terminTraeger().some(t => t.id === terminPerson)) terminPerson = "p1";
+  const aktiv = pinsel === "termin" ? "termin:" + terminPerson : pinsel;
   elPinsel.querySelectorAll("input").forEach(i => {
-    i.checked = (i.value === pinsel);
+    i.checked = (i.value === aktiv);
     i.addEventListener("change", () => {
-      pinsel = i.value;
-      // Eine Person zu wählen legt zugleich fest, wem neue Termine gehören.
-      if(zustand.personen.some(p => p.id === i.value)){
-        terminPerson = i.value;
-        pinselZeichnen();
+      if(i.value.indexOf("termin:") === 0){
+        pinsel = "termin";
+        terminPerson = i.value.slice(7);
+      }else{
+        pinsel = i.value;
       }
     });
   });
   if(!elPinsel.querySelector("input:checked")){
     const erste = elPinsel.querySelector("input");
     if(erste){ erste.checked = true; pinsel = erste.value; }
+  }
+  pinselZahlenZeichnen();
+}
+
+/* Zähler in den Malknöpfen — läuft nach jedem Strich, ohne die Knöpfe neu zu bauen. */
+function pinselZahlenZeichnen(){
+  elPinsel.querySelectorAll(".zahl[data-person]").forEach(z => {
+    const p = zustand.personen.find(x => x.id === z.dataset.person);
+    if(!p) return;
+    const anspruch = anspruchVon(p), verbraucht = urlaubsverbrauch(p.id);
+    const offen = anspruch - verbraucht;
+    z.textContent = offen;
+    z.classList.toggle("ueber", offen < 0);
+    z.title = verbraucht + " von " + anspruch + " Urlaubstagen verplant, " +
+              (offen < 0 ? Math.abs(offen) + " über dem Anspruch" : offen + " noch offen");
+  });
+  const l = elPinsel.querySelector(".zahl[data-luecken]");
+  if(l){
+    const n = luecken().length;
+    l.textContent = n;
+    l.classList.toggle("ueber", n > 0);
+    l.title = n + " betreuungspflichtige Tage noch unverplant";
   }
 }
 
@@ -1543,7 +1631,7 @@ function titelText(datum){
     if(r) teile.push(r.name);
   });
   termineAm(datum).forEach(e => {
-    const r = ressourceFinden(e.person);
+    const r = traegerFinden(e.person);
     teile.push("Termin" + (r ? " " + r.name : "") + ": " + (e.name || "ohne Bezeichnung") +
                (freiAm(datum).indexOf(e.person) !== -1 ? " — hier ist kein Urlaub möglich!" : ""));
   });
@@ -1623,7 +1711,7 @@ function zelleZeichnen(datum){
   const tspur   = z.querySelector(".terminspur");
   tspur.innerHTML = "";
   if(termine.length){
-    const person = ressourceFinden(termine[0].person);
+    const person = traegerFinden(termine[0].person);
     const nachbarTermin = versatz => {
       const n = plusTage(d, versatz);
       if(n.getMonth() !== d.getMonth()) return false;
@@ -1708,23 +1796,12 @@ function bilanzZeichnen(){
     zeile.innerHTML =
       '<span class="punkt"></span>' +
       '<span class="name"></span>' +
-      '<span class="zahl"><b></b> / </span>' +
-      '<input type="number" min="0" max="366" step="1">';
+      '<span class="zahl"><b></b> / <span class="von"></span></span>';
     farbeSetzen(zeile.querySelector(".punkt"), p.farbe);
     zeile.querySelector(".name").textContent = p.name;
     zeile.querySelector(".zahl b").textContent = verbraucht;
-    const feld = zeile.querySelector("input");
-    feld.value = anspruch;
-    feld.title = "Urlaubsanspruch " + jahr + " für " + p.name;
-    feld.addEventListener("change", () => {
-      const v = Math.max(0, Math.min(366, Math.round(Number(feld.value))));
-      if(!Number.isFinite(v)){ feld.value = anspruch; return; }
-      merken();
-      if(!p.anspruch) p.anspruch = {};
-      p.anspruch[jahr] = v;
-      bilanzZeichnen();
-      speichernGeplant();
-    });
+    zeile.querySelector(".von").textContent = anspruch;
+    zeile.title = "Urlaubsanspruch " + jahr + " — änderbar unter Einstellungen";
     elBilanz.appendChild(zeile);
 
     const rest = document.createElement("div");
@@ -1739,7 +1816,7 @@ function bilanzZeichnen(){
     elBilanz.appendChild(rest);
   });
 
-  kopfBilanzZeichnen();
+  pinselZahlenZeichnen();
 
   const pflicht  = anzahlBetreuungspflichtig();
   const offen    = luecken().length;
@@ -1754,25 +1831,34 @@ function bilanzZeichnen(){
   document.getElementById("zeileLuecken").classList.toggle("hat-luecken", offen > 0);
 }
 
-/* Dieselben Zahlen wie in der Seitenleiste, nur schmal — im klebenden Kopf
-   stehen sie auch dann noch da, wenn das Raster weit nach unten gescrollt ist. */
-function kopfBilanzZeichnen(){
-  const el = document.getElementById("kopfBilanz");
-  el.innerHTML = "";
+/* Urlaubsanspruch je Person für das aktive Jahr (Reiter Einstellungen). */
+function anspruchZeichnen(){
+  const jahr = String(zustand.settings.aktivesJahr);
+  document.getElementById("anspruchJahr").textContent = jahr;
+  const box = document.getElementById("anspruchListe");
+  box.innerHTML = "";
   zustand.personen.forEach(p => {
-    const verbraucht = urlaubsverbrauch(p.id);
-    const anspruch   = anspruchVon(p);
-    const s = document.createElement("span");
-    s.className = "kb" + (verbraucht > anspruch ? " ueber" : "");
-    s.innerHTML = '<span class="punkt"></span><span class="name"></span>' +
-                  '<span><b></b><span class="von"></span></span>';
-    farbeSetzen(s.querySelector(".punkt"), p.farbe);
-    s.querySelector(".name").textContent = p.name;
-    s.querySelector("b").textContent = verbraucht;
-    s.querySelector(".von").textContent = " / " + anspruch;
-    s.title = p.name + ": " + verbraucht + " von " + anspruch + " Urlaubstagen verplant" +
-              (verbraucht > anspruch ? " — über dem Anspruch" : "");
-    el.appendChild(s);
+    const zeile = document.createElement("label");
+    zeile.className = "anspruch";
+    zeile.innerHTML = '<span class="punkt"></span><span class="name"></span>' +
+                      '<input type="number" min="0" max="366" step="1"> Tage';
+    farbeSetzen(zeile.querySelector(".punkt"), p.farbe);
+    zeile.querySelector(".name").textContent = p.name;
+    const feld = zeile.querySelector("input");
+    feld.value = anspruchVon(p);
+    feld.title = "Urlaubsanspruch " + jahr + " für " + p.name;
+    feld.addEventListener("change", () => {
+      const v = Math.max(0, Math.min(366, Math.round(Number(feld.value))));
+      if(!Number.isFinite(v)){ feld.value = anspruchVon(p); return; }
+      merken();
+      if(!p.anspruch) p.anspruch = {};
+      p.anspruch[jahr] = v;
+      feld.value = v;
+      bilanzZeichnen();
+      hinweiseZeichnen();
+      speichernGeplant();
+    });
+    box.appendChild(zeile);
   });
 }
 
@@ -1833,7 +1919,7 @@ function hinweiseZeichnen(){
   if(konflikte.length){
     const proPerson = {};
     konflikte.forEach(k => {
-      const r = ressourceFinden(k.termin.person);
+      const r = traegerFinden(k.termin.person);
       const schluessel = (r ? r.name : "?") + "|" + (k.termin.name || "ohne Bezeichnung");
       (proPerson[schluessel] = proPerson[schluessel] || []).push(k.datum);
     });
@@ -2051,13 +2137,13 @@ function termineZeichnen(){
   const wahl = document.getElementById("terminPersonWahl");
   const vorher = wahl.value;
   wahl.innerHTML = "";
-  zustand.personen.forEach(p => {
+  terminTraeger().forEach(p => {
     const o = document.createElement("option");
     o.value = p.id;
     o.textContent = p.name;
     wahl.appendChild(o);
   });
-  wahl.value = zustand.personen.some(p => p.id === vorher) ? vorher : terminPerson;
+  wahl.value = terminTraeger().some(p => p.id === vorher) ? vorher : terminPerson;
 
   const jahr = zustand.settings.aktivesJahr;
   ["terminVon","terminBis"].forEach(id => {
@@ -2507,6 +2593,7 @@ function allesZeichnen(){
   reisenZeichnen();
   termineZeichnen();
   haushaltZeichnen();
+  anspruchZeichnen();
   legendeZeichnen();
   schalterZeichnen();
   zeitAnzeigen();
@@ -3071,6 +3158,54 @@ document.getElementById("btnDruck").addEventListener("click", () => {
   window.print();
 });
 
+/* ------------------------------------------------------------
+   Version und Update. GitHub Pages lässt Browser die Seite bis zu zehn
+   Minuten aus dem Cache zeigen — der Knopf holt die Datei am Cache vorbei,
+   vergleicht die Version und lädt neu. Unter file:// gibt es nichts zu holen.
+   ------------------------------------------------------------ */
+let neueVersion = null;
+function versionZeichnen(){
+  const k = document.getElementById("btnVersion");
+  k.classList.toggle("neu", !!neueVersion);
+  k.textContent = neueVersion ? "↻ Update auf v" + neueVersion : "v" + APP_VERSION;
+  k.title = neueVersion ? "Version " + neueVersion + " ist verfügbar — klicken zum Aktualisieren"
+                        : "Version " + APP_VERSION + " — klicken: auf neue Version prüfen";
+}
+async function versionPruefen(){
+  if(location.protocol === "file:") return null;
+  try{
+    const r = await fetch(location.href.split("#")[0], { cache:"reload" });
+    if(!r.ok) return null;
+    const m = /const APP_VERSION = "([^"]+)"/.exec(await r.text());
+    neueVersion = m && m[1] !== APP_VERSION ? m[1] : null;
+  }catch(e){ return null; }
+  versionZeichnen();
+  return neueVersion;
+}
+document.getElementById("btnVersion").addEventListener("click", async () => {
+  if(location.protocol === "file:"){ location.reload(); return; }
+  const k = document.getElementById("btnVersion");
+  k.classList.add("lade");
+  await versionPruefen();
+  k.classList.remove("lade");
+  if(neueVersion){
+    clearTimeout(speicherTimer); speichern();
+    location.reload();
+  }else{
+    k.textContent = "✓ v" + APP_VERSION + " aktuell";
+    setTimeout(versionZeichnen, 2500);
+  }
+});
+versionZeichnen();
+versionPruefen();
+
+document.querySelectorAll(".reiter button").forEach(k => k.addEventListener("click", () => {
+  document.body.classList.toggle("einst", k.dataset.reiter === "einst");
+  document.querySelectorAll(".reiter button").forEach(x =>
+    x.setAttribute("aria-selected", String(x === k)));
+  notizSchliessen();
+  window.scrollTo(0, 0);
+}));
 document.getElementById("btnTermin").addEventListener("click", terminHinzufuegen);
 document.getElementById("terminName").addEventListener("keydown", ev => {
   if(ev.key === "Enter") terminHinzufuegen();
@@ -3083,7 +3218,7 @@ document.getElementById("schulfreiName").addEventListener("keydown", ev => {
 document.getElementById("feldKind").addEventListener("change", ev => {
   merken();
   zustand.settings.kind = ev.target.value.trim() || "das Kind";
-  kopfZeichnen(); hinweiseZeichnen(); speichernGeplant();
+  kopfZeichnen(); pinselZeichnen(); hinweiseZeichnen(); termineZeichnen(); speichernGeplant();
 });
 document.getElementById("feldOrt").addEventListener("change", ev => {
   merken();

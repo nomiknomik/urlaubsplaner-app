@@ -678,7 +678,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
-const APP_VERSION = "3.2";      // bei jeder ausgelieferten Änderung erhöhen
+const APP_VERSION = "3.3";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -2616,6 +2616,17 @@ function blockTage(datum){
   return lauf ? lauf.tage : [datum];
 }
 
+/* Alle Tage, die denselben Titel tragen und zusammenhängen (Wochenenden und
+   Feiertage dazwischen überbrückt) — „Entfernen“ nimmt ihn überall weg, statt
+   dass jeder Tag einzeln angeklickt werden muss. */
+function titelTage(datum){
+  const titel = notizVon(datum);
+  if(!titel) return [datum];
+  const gleich = Object.keys(eintraege()).filter(d => tagIndex[d] && notizVon(d) === titel);
+  const lauf = laeufe(gleich, arbeitsfrei).find(l => l.tage.indexOf(datum) !== -1);
+  return lauf ? lauf.tage.filter(d => notizVon(d) === titel) : [datum];
+}
+
 function notizOeffnen(datum, x, y){
   if(!tagIndex[datum]) return;
   notizDatum = datum;
@@ -2633,6 +2644,9 @@ function notizOeffnen(datum, x, y){
       "auf den ganzen Block " + kurz(block[0]) + "–" + kurz(block[block.length-1]) +
       " anwenden (" + block.length + " Tage)";
   }
+  const titel = titelTage(datum);
+  document.getElementById("notizWeg").textContent =
+    titel.length > 1 ? "Entfernen (" + titel.length + " Tage)" : "Entfernen";
 
   elNotizBox.classList.add("an");
   // Erst einblenden, dann messen: vorher hat der Kasten keine Maße.
@@ -2651,8 +2665,10 @@ function notizUebernehmen(text){
   merken();
   const e = eintraege();
   const haken = document.getElementById("notizBlock");
-  const ziele = (!document.getElementById("notizBlockZeile").hidden && haken.checked)
+  let ziele = (!document.getElementById("notizBlockZeile").hidden && haken.checked)
               ? blockTage(notizDatum) : [notizDatum];
+  // Entfernen gilt immer für den ganzen Titel, nicht nur für den einen Tag.
+  if(!text) ziele = Array.from(new Set(ziele.concat(titelTage(notizDatum))));
   ziele.forEach(d => {
     if(text){
       if(!e[d]) e[d] = { frei:[] };

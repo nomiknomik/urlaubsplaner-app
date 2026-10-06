@@ -299,6 +299,32 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
 .sf-liste li .punkte{display:flex;gap:2px;flex:0 0 auto}
 .sf-liste li .punkte i{width:4px;height:13px;border-radius:2px;background:var(--f)}
 
+/* ---------- Kalender-Export (.ics) ---------- */
+#icsDialog{border:1px solid var(--linie-stark);border-radius:8px;padding:0;
+  width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 48px);
+  background:var(--flaeche);color:var(--text)}
+#icsDialog::backdrop{background:rgba(40,36,30,.35)}
+#icsDialog .ics-innen{display:flex;flex-direction:column;max-height:calc(100vh - 50px)}
+#icsDialog .ics-kopf{padding:14px 16px 8px;border-bottom:1px solid var(--linie)}
+#icsDialog h2{font-size:15px;margin:0 0 4px}
+#icsDialog .fussnote{margin:4px 0 0}
+.ics-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ics-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;font-size:12px;
+  border:1px solid var(--linie-stark);border-radius:999px;background:var(--flaeche);cursor:pointer}
+.ics-chip i{width:9px;height:9px;border-radius:50%;background:var(--f-voll,#999)}
+.ics-chip[aria-pressed=true]{background:var(--tag-frei);border-color:var(--akzent)}
+.ics-chip[data-teil]{border-style:dashed}
+#icsListe{overflow:auto;padding:6px 16px 10px;flex:1 1 auto}
+.ics-gruppe{margin:10px 0 4px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+.ics-gruppe small{font-weight:400;color:var(--text-schwach)}
+.ics-zeile{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:3px 0 3px 18px;cursor:pointer}
+.ics-zeile:hover{background:var(--bg)}
+.ics-zeile .sf-datum{font-variant-numeric:tabular-nums;color:var(--text-schwach);min-width:92px}
+.ics-zeile .punkt{width:4px;height:13px;border-radius:2px;background:var(--f);flex:0 0 auto}
+#icsDialog .ics-fuss{display:flex;gap:8px;align-items:center;justify-content:flex-end;
+  padding:10px 16px;border-top:1px solid var(--linie)}
+#icsDialog .ics-fuss span{margin-right:auto;font-size:12px;color:var(--text-schwach)}
+
 /* ---------- Jahres-Umschalter und Ferienpflege (Phase 3) ---------- */
 /* Bilanz im Kopf: sie klebt mit der Werkzeugleiste oben und bleibt damit
    auch beim Malen weit unten im Jahr sichtbar. Wird das Fenster schmal,
@@ -487,6 +513,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
     <button class="btn ikon" id="syncBtn" data-st="off" title="Online-Abgleich nicht eingerichtet">☁</button>
     <button class="btn" id="btnRueckgaengig" title="Letzte Änderung zurücknehmen (Strg+Z)" disabled>↶ Rückgängig</button>
     <button class="btn" id="btnDruck" title="Öffnet den Druckdialog — dort „Hintergrundgrafiken“ aktivieren">PDF / Drucken</button>
+    <button class="btn" id="btnIcs" title="Einträge als .ics-Dateien für den Kalender (macOS) ausgeben">Kalender (.ics)</button>
     <button class="btn" id="btnExport">Backup sichern</button>
     <button class="btn" id="btnImport">Backup laden</button>
     <input type="file" id="dateiImport" accept="application/json,.json" hidden>
@@ -687,6 +714,25 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
   </div>
 </div>
 
+<dialog id="icsDialog" class="nicht-drucken">
+  <div class="ics-innen">
+    <div class="ics-kopf">
+      <h2 id="icsTitel">Kalender-Export</h2>
+      <p class="fussnote">Jede Zeile einzeln an- oder abwählen. Die Schnellauswahl wählt
+        alle Zeilen einer Person oder Gruppe. Je Gruppe entsteht eine eigene .ics-Datei
+        — in macOS Kalender per Doppelklick in den gewünschten Kalender importieren.
+        Ein erneuter Import ersetzt gleiche Termine statt sie zu verdoppeln.</p>
+      <div class="ics-chips" id="icsChips"></div>
+    </div>
+    <div id="icsListe"></div>
+    <div class="ics-fuss">
+      <span id="icsZahl"></span>
+      <button class="btn mini" id="icsAbbruch" type="button">Schließen</button>
+      <button class="btn mini" id="icsLos" type="button">Dateien erzeugen</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 "use strict";
 
@@ -695,7 +741,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
-const APP_VERSION = "3.5";      // bei jeder ausgelieferten Änderung erhöhen
+const APP_VERSION = "3.6";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -1452,6 +1498,208 @@ function importieren(datei){
   };
   leser.onerror = () => alert("Die Datei konnte nicht gelesen werden.");
   leser.readAsText(datei);
+}
+
+/* ------------------------------------------------------------
+   Kalender-Export (.ics) — je Gruppe eine Datei (Urlaub je Person,
+   Kind, Ferien/schulfrei, Betreuung). Zusammenhängende Tage werden ein
+   Ganztagstermin; Wochenenden und Feiertage überbrücken wie bei den Reisen.
+   Die UID hängt nur an Art, Ressource und Beginn — ein erneuter Import
+   aktualisiert den Termin, statt eine Dublette anzulegen.
+   ------------------------------------------------------------ */
+let icsAuswahl = {};   // UID -> ausgewählt
+
+function icsGruppen(){
+  const jahr = zustand.settings.aktivesJahr;
+  const j = jahrSicherstellen(jahr);
+  const e = eintraege();
+  const gruppen = [];
+  const lauf = (e, ressId) => laeufe(
+    Object.keys(e).filter(d => tagIndex[d] && Array.isArray(e[d].frei) && e[d].frei.indexOf(ressId) !== -1),
+    arbeitsfrei);
+  const titelAus = tage => { for(const d of tage){ const n = notizVon(d); if(n) return n; } return ""; };
+  const termine = id => terminLaeufe().filter(t => t.person.id === id).map(t => {
+    const name = (t.eintraege.find(x => x.name) || {}).name || "Termin";
+    return { uid:"termin-"+id+"-"+t.von, von:t.von, bis:t.bis, titel:name, quelle:id, farbe:t.person.farbe };
+  });
+
+  zustand.personen.forEach(p => {
+    const zeilen = lauf(e, p.id).map(l => {
+      const n = titelAus(l.tage.filter(d => freiAm(d).indexOf(p.id) !== -1));
+      return { uid:"urlaub-"+p.id+"-"+l.von, von:l.von, bis:l.bis, quelle:p.id, farbe:p.farbe,
+               titel:"Urlaub " + p.name + (n ? " – " + n : "") };
+    }).concat(termine(p.id));
+    gruppen.push({ id:"p-"+p.id, name:"Urlaub " + p.name, farbe:p.farbe, zeilen });
+  });
+
+  const kind = traegerFinden("kind");
+  gruppen.push({ id:"kind", name:kind.name, farbe:KIND_FARBE,
+    zeilen: termine("kind").map(z => Object.assign(z, { titel: kind.name + ": " + z.titel })) });
+
+  const fz = j.ferien.filter(f => f.von && f.bis).map(f => ({
+    uid:"ferien-"+f.von, von:f.von, bis:f.bis, titel:f.name || "Ferien", quelle:"ferien" }));
+  laeufe(j.schulfrei.map(f => f.datum).filter(d => tagIndex[d])).forEach(l => {
+    const namen = l.tage.map(d => (j.schulfrei.find(f => f.datum === d) || {}).name).filter(Boolean);
+    fz.push({ uid:"schulfrei-"+l.von, von:l.von, bis:l.bis, titel:namen[0] || "Schulfrei", quelle:"ferien" });
+  });
+  gruppen.push({ id:"ferien", name:"Ferien und schulfrei", farbe:"#4A8CBF", zeilen:fz });
+
+  const bz = [];
+  zustand.betreuung.forEach(b => lauf(e, b.id).forEach(l => {
+    const n = titelAus(l.tage.filter(d => freiAm(d).indexOf(b.id) !== -1));
+    bz.push({ uid:"betreuung-"+b.id+"-"+l.von, von:l.von, bis:l.bis, quelle:b.id, farbe:b.farbe,
+              titel:b.name + (n ? " – " + n : "") });
+  }));
+  gruppen.push({ id:"betreuung", name:"Betreuung", farbe:"#7A6BA8", zeilen:bz });
+
+  gruppen.forEach(g => g.zeilen.sort((a,b) => a.von < b.von ? -1 : a.von > b.von ? 1 : 0));
+  return gruppen;
+}
+
+/* Schnellauswahl: Personen, Kind, jede Betreuungsquelle, Ferien. */
+function icsChips(gruppen){
+  const alle = gruppen.flatMap(g => g.zeilen);
+  const chips = zustand.personen.map(p => ({ name:p.name, farbe:p.farbe,
+    zeilen: gruppen.find(g => g.id === "p-"+p.id).zeilen }));
+  chips.push({ name:traegerFinden("kind").name, farbe:KIND_FARBE, zeilen: gruppen.find(g => g.id === "kind").zeilen });
+  chips.push({ name:"Ferien/schulfrei", farbe:"#4A8CBF", zeilen: gruppen.find(g => g.id === "ferien").zeilen });
+  chips.push({ name:"Betreuung", farbe:"#7A6BA8", zeilen: gruppen.find(g => g.id === "betreuung").zeilen });
+  zustand.betreuung.forEach(b => chips.push({ name:b.name, farbe:b.farbe, teil:true,
+    zeilen: alle.filter(z => z.uid.indexOf("betreuung-"+b.id+"-") === 0) }));
+  return chips.filter(c => c.zeilen.length);
+}
+
+function icsZeichnen(){
+  const gruppen = icsGruppen();
+  const alle = gruppen.flatMap(g => g.zeilen);
+  const neu = {};
+  alle.forEach(z => neu[z.uid] = z.uid in icsAuswahl ? icsAuswahl[z.uid] : true);
+  icsAuswahl = neu;
+  document.getElementById("icsTitel").textContent = "Kalender-Export " + zustand.settings.aktivesJahr;
+
+  const setzen = (zeilen, an) => { zeilen.forEach(z => icsAuswahl[z.uid] = an); icsZeichnen(); };
+  const alleAn = zeilen => zeilen.length > 0 && zeilen.every(z => icsAuswahl[z.uid]);
+  const keinerAn = zeilen => zeilen.every(z => !icsAuswahl[z.uid]);
+
+  const chipBox = document.getElementById("icsChips");
+  chipBox.innerHTML = "";
+  [{ name:"Alle", zeilen:alle }].concat(icsChips(gruppen)).forEach(c => {
+    const k = document.createElement("button");
+    k.type = "button";
+    k.className = "ics-chip";
+    if(c.teil) k.dataset.teil = "1";
+    k.setAttribute("aria-pressed", String(alleAn(c.zeilen)));
+    if(c.farbe){ const i = document.createElement("i"); farbeSetzen(i, c.farbe); k.appendChild(i); }
+    k.appendChild(document.createTextNode(c.name + " (" + c.zeilen.length + ")"));
+    k.title = alleAn(c.zeilen) ? "Alle Zeilen abwählen" : "Alle Zeilen auswählen";
+    k.addEventListener("click", () => setzen(c.zeilen, !alleAn(c.zeilen)));
+    chipBox.appendChild(k);
+  });
+
+  const liste = document.getElementById("icsListe");
+  const scroll = liste.scrollTop;
+  liste.innerHTML = "";
+  gruppen.forEach(g => {
+    const kopf = document.createElement("label");
+    kopf.className = "ics-gruppe";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = alleAn(g.zeilen);
+    cb.indeterminate = !cb.checked && !keinerAn(g.zeilen);
+    cb.disabled = !g.zeilen.length;
+    cb.addEventListener("change", () => setzen(g.zeilen, cb.checked));
+    kopf.appendChild(cb);
+    kopf.appendChild(document.createTextNode(g.name + " "));
+    const n = document.createElement("small");
+    n.textContent = g.zeilen.length ? "→ " + icsDateiname(g) : "keine Einträge";
+    kopf.appendChild(n);
+    liste.appendChild(kopf);
+    g.zeilen.forEach(z => {
+      const zeile = document.createElement("label");
+      zeile.className = "ics-zeile";
+      const c = document.createElement("input");
+      c.type = "checkbox";
+      c.checked = !!icsAuswahl[z.uid];
+      c.dataset.uid = z.uid;
+      c.addEventListener("change", () => { icsAuswahl[z.uid] = c.checked; icsZeichnen(); });
+      zeile.appendChild(c);
+      if(z.farbe){ const p = document.createElement("span"); p.className = "punkt"; farbeSetzen(p, z.farbe); zeile.appendChild(p); }
+      const d = document.createElement("span");
+      d.className = "sf-datum";
+      d.textContent = spanne(z.von, z.bis);
+      zeile.appendChild(d);
+      zeile.appendChild(document.createTextNode(z.titel));
+      liste.appendChild(zeile);
+    });
+  });
+  liste.scrollTop = scroll;
+
+  const gewaehlt = alle.filter(z => icsAuswahl[z.uid]);
+  const dateien = gruppen.filter(g => g.zeilen.some(z => icsAuswahl[z.uid])).length;
+  document.getElementById("icsZahl").textContent =
+    gewaehlt.length + " von " + alle.length + " Terminen · " + dateien + (dateien === 1 ? " Datei" : " Dateien");
+  document.getElementById("icsLos").disabled = !gewaehlt.length;
+}
+
+function icsDateiname(g){
+  const slug = g.name.toLowerCase()
+    .replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/ß/g,"ss")
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+  return "urlaubsplaner-" + zustand.settings.aktivesJahr + "-" + (slug || g.id) + ".ics";
+}
+
+/* RFC 5545: Sonderzeichen escapen, Zeilen nach 75 Oktetts falten, CRLF. */
+function icsText(t){
+  return String(t).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");
+}
+function icsFalten(zeile){
+  const enc = new TextEncoder();
+  const teile = [];
+  let akt = "", len = 0, max = 75;
+  for(const ch of zeile){
+    const n = enc.encode(ch).length;
+    if(len + n > max){ teile.push(akt); akt = " "; len = 1; max = 75; }
+    akt += ch; len += n;
+  }
+  teile.push(akt);
+  return teile.join("\r\n");
+}
+function icsDatum(datum){ return datum.replace(/-/g,""); }
+function icsKalender(g, zeilen){
+  const stempel = new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d+/,"");
+  const z = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Urlaubsplaner//DE","CALSCALE:GREGORIAN",
+             "METHOD:PUBLISH","X-WR-CALNAME:" + icsText(g.name)];
+  zeilen.forEach(e => {
+    z.push("BEGIN:VEVENT",
+      "UID:" + e.uid.replace(/[^A-Za-z0-9-]/g,"_") + "@urlaubsplaner",
+      "DTSTAMP:" + stempel,
+      "DTSTART;VALUE=DATE:" + icsDatum(e.von),
+      "DTEND;VALUE=DATE:" + icsDatum(iso(plusTage(ausIso(e.bis), 1))),
+      "SUMMARY:" + icsText(e.titel),
+      "TRANSP:TRANSPARENT",
+      "END:VEVENT");
+  });
+  z.push("END:VCALENDAR");
+  return z.map(icsFalten).join("\r\n") + "\r\n";
+}
+
+function icsAusgeben(){
+  const dateien = icsGruppen()
+    .map(g => ({ g, zeilen: g.zeilen.filter(z => icsAuswahl[z.uid]) }))
+    .filter(x => x.zeilen.length)
+    .map(x => ({ name: icsDateiname(x.g), text: icsKalender(x.g, x.zeilen) }));
+  // Mehrere Downloads leicht versetzt — sonst verschluckt der Browser welche.
+  dateien.forEach((f, i) => setTimeout(() => {
+    const url = URL.createObjectURL(new Blob([f.text], { type:"text/calendar;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = f.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }, i * 400));
+  return dateien;
 }
 
 /* ------------------------------------------------------------
@@ -3340,6 +3588,13 @@ window.addEventListener("online",  syncStatus);
 window.addEventListener("offline", syncStatus);
 
 document.getElementById("btnExport").addEventListener("click", exportieren);
+document.getElementById("btnIcs").addEventListener("click", () => {
+  icsAuswahl = {};
+  icsZeichnen();
+  document.getElementById("icsDialog").showModal();
+});
+document.getElementById("icsAbbruch").addEventListener("click", () => document.getElementById("icsDialog").close());
+document.getElementById("icsLos").addEventListener("click", icsAusgeben);
 document.getElementById("btnImport").addEventListener("click", () => {
   document.getElementById("dateiImport").click();
 });

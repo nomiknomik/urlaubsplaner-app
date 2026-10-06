@@ -1,0 +1,3172 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Urlaubsplaner</title>
+<style>
+:root{
+  --bg:#FAF8F4; --flaeche:#FFFFFF; --linie:#DAD5CB; --linie-stark:#B9B2A4;
+  --text:#2B2A26; --text-schwach:#7A756A;
+  --tag-schule:#FFFFFF; --tag-we:#EFEDE8; --tag-feiertag:#FBF0C4; --tag-frei:#D9E8F5;
+  --warn:#B23B3B; --warn-bg:#FBE9E7;
+  --akzent:#2F7D64;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font:14px/1.45 "Segoe UI",Roboto,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select{font:inherit;color:inherit}
+
+/* Kopf und Werkzeugleiste bleiben beim Scrollen stehen — das Raster ist
+   höher als der Bildschirm, die Malpalette muss trotzdem erreichbar sein. */
+#kopfbereich{position:sticky;top:0;z-index:40;box-shadow:0 2px 6px rgba(0,0,0,.05)}
+.btn[disabled]{opacity:.4;cursor:default}
+.btn[disabled]:hover{background:var(--flaeche)}
+.btn[disabled]:active{transform:none}
+
+/* ---------- Kopf ---------- */
+header{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:12px 20px;background:var(--flaeche);border-bottom:1px solid var(--linie);
+}
+header h1{font-size:19px;margin:0;font-weight:600;letter-spacing:-.01em}
+header h1 small{font-weight:400;color:var(--text-schwach);font-size:13px;margin-left:8px}
+.kopf-aktionen{margin-left:auto;display:flex;gap:8px}
+.btn{
+  background:var(--flaeche);border:1px solid var(--linie-stark);border-radius:6px;
+  padding:6px 13px;cursor:pointer;
+}
+.btn:hover{background:#F3F0EA}
+.btn:active{transform:translateY(1px)}
+
+/* ---------- Warnbanner ---------- */
+#speicherWarnung{
+  display:none;padding:10px 20px;background:var(--warn-bg);
+  border-bottom:1px solid #E8B4AE;color:#7E2A2A;font-size:13px;
+}
+#speicherWarnung.an{display:block}
+#speicherWarnung b{color:var(--warn)}
+
+/* ---------- Werkzeugleiste ---------- */
+#werkzeuge{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:10px 20px;background:var(--flaeche);border-bottom:1px solid var(--linie);
+}
+#werkzeuge .label{color:var(--text-schwach);margin-right:4px}
+.pinsel{
+  display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+  border:1px solid var(--linie-stark);border-radius:20px;padding:5px 13px 5px 9px;
+  background:var(--flaeche);user-select:none;
+}
+.pinsel input{position:absolute;opacity:0;width:0;height:0}
+.pinsel .punkt{width:6px;height:16px;border-radius:3px}
+.pinsel:has(input:checked){
+  border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text);font-weight:600;
+}
+.pinsel.radierer .punkt{
+  background:repeating-linear-gradient(45deg,#fff 0 3px,#C9C3B7 3px 6px);
+}
+
+/* ---------- Layout ---------- */
+main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
+#rasterBereich{flex:1 1 auto;min-width:0}
+
+/* ---------- Jahresraster ---------- */
+#raster{
+  display:grid;grid-template-columns:30px repeat(12,minmax(0,1fr));
+  gap:1px;background:var(--linie);border:1px solid var(--linie);
+  border-radius:8px;overflow:hidden;user-select:none;
+  /* Spurraster der Balken. --spuren setzt das Skript auf die Zahl der
+     Ressourcen, damit das Balkenfeld mitwächst; --zeile ist die Höhe einer
+     Rasterzeile samt Fuge und bemisst die senkrechten Beschriftungen. */
+  --spuren:5; --spur:9px; --balken:8px; --zeile:27px;
+  --feld:calc(3px + var(--spuren) * var(--spur));
+}
+.kopfzelle{
+  font-size:12px;font-weight:600;text-align:center;padding:6px 0;
+  background:#F3F0EA;color:var(--text-schwach);
+}
+.tagnummer{
+  font-size:11px;color:var(--text-schwach);text-align:center;
+  padding-top:5px;background:#F3F0EA;
+}
+.leer{background:#F7F5F1}
+.tag{
+  position:relative;height:26px;padding-left:var(--feld);
+  display:flex;align-items:center;justify-content:center;cursor:crosshair;
+  background:var(--tag-schule);
+}
+.tag .wt{font-size:10px;color:#9A948A;pointer-events:none}
+.tag.we{background:var(--tag-we)}
+.tag.feiertag{background:var(--tag-feiertag)}
+.tag.schulfrei{background:var(--tag-frei)}
+.tag.heute{outline:2px solid var(--akzent);outline-offset:-2px;z-index:1}
+/* Lücke doppelt kodiert (§4): kräftige Umrandung UND Schraffur, damit sie auch
+   bei Rot-Grün-Schwäche und im Graustufendruck trägt. Die Schraffur liegt
+   unter den Balken (z-index 0 gegen 2). */
+.tag.luecke{box-shadow:inset 0 0 0 2px var(--warn)}
+.tag.luecke::before{
+  content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+  background:repeating-linear-gradient(45deg,
+    rgba(178,59,59,.22) 0 3px, rgba(178,59,59,0) 3px 7px);
+}
+.tag:hover{box-shadow:inset 0 0 0 2px var(--text)}
+/* Senkrechte Balken: je Ressource eine feste Spur. Innerhalb eines
+   zusammenhängenden Blocks ragen die Segmente 1px über die Zellgrenze hinaus und
+   verschmelzen zu einer Linie; nur Anfang und Ende eines Blocks werden rund
+   abgeschlossen. z-index hebt sie über den Hintergrund der Folgezelle. */
+.balken{position:absolute;left:0;top:0;bottom:0;width:var(--feld);pointer-events:none}
+.balken i{position:absolute;width:var(--balken);z-index:2;background:var(--f)}
+
+/* ---------- Seitenleiste ---------- */
+#seitenleiste{flex:0 0 268px;display:flex;flex-direction:column;gap:14px}
+.karte{background:var(--flaeche);border:1px solid var(--linie);border-radius:8px;padding:14px 15px}
+.karte h2{
+  font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--text-schwach);margin:0 0 11px;font-weight:600;
+}
+.person{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.person .punkt{width:6px;height:16px;flex:0 0 auto;border-radius:3px}
+.person .name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.person .zahl{font-variant-numeric:tabular-nums;white-space:nowrap}
+.person .zahl b{font-size:15px}
+.person input[type=number]{
+  width:48px;padding:2px 4px;border:1px solid var(--linie-stark);
+  border-radius:4px;text-align:right;background:var(--bg);
+}
+.rest{font-size:12px;color:var(--text-schwach);margin:-6px 0 12px 20px}
+.rest.ueber{color:var(--warn);font-weight:600}
+.trenner{border:0;border-top:1px solid var(--linie);margin:12px 0}
+.zeile{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-bottom:6px}
+.zeile span:last-child{font-variant-numeric:tabular-nums;font-weight:600}
+.fussnote{font-size:11.5px;color:var(--text-schwach);line-height:1.4;margin:10px 0 0}
+
+/* ---------- Legende ---------- */
+#legende{margin:0 20px 24px;padding:14px 15px;background:var(--flaeche);
+  border:1px solid var(--linie);border-radius:8px;max-width:1500px}
+#legende h2{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--text-schwach);margin:0 0 10px;font-weight:600}
+.legende-liste{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:13px}
+.legende-eintrag{display:flex;align-items:center;gap:7px}
+.legende-eintrag .feld{width:18px;height:14px;border:1px solid var(--linie-stark);border-radius:2px}
+.legende-eintrag .streifen{width:6px;height:17px;border-radius:3px;background:var(--f)}
+.legende-eintrag .probe-luecke{
+  background:var(--tag-frei) repeating-linear-gradient(45deg,
+    rgba(178,59,59,.30) 0 3px, rgba(178,59,59,0) 3px 7px);
+  border:2px solid var(--warn);
+}
+
+/* ---------- Schalter ---------- */
+.schalter{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;
+  font-size:13px;color:var(--text-schwach)}
+#werkzeuge .rechts{margin-left:auto;display:flex;align-items:center;gap:14px}
+
+/* ---------- Notizen im Jahresraster ---------- */
+/* Die Beschriftung eines Blocks läuft senkrecht über seine ganze Höhe statt
+   waagerecht in einer Zelle: im Jahresraster ist eine Zelle rund 40 px breit,
+   aber ein Urlaubsblock zehn Zeilen hoch — waagerecht war nach drei Zeichen
+   Schluss ("Garda…"), senkrecht steht der Name vollständig da. Die Höhe setzt
+   das Skript am ersten Tag des Blocks, der Text zentriert sich darin. */
+.tag .notiz{
+  position:absolute;right:9px;top:2px;width:14px;z-index:3;
+  writing-mode:vertical-rl;text-orientation:mixed;
+  display:block;line-height:14px;text-align:center;pointer-events:none;
+  font-size:10px;color:#46423A;letter-spacing:.01em;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+}
+/* Ein einzelner Tag ist nur 26 px hoch — senkrecht blieben davon drei Zeichen.
+   Solche Notizen laufen weiter quer durch die Zelle, wo rund 45 px Platz sind. */
+.tag .notiz.quer{
+  writing-mode:horizontal-tb;
+  left:calc(var(--feld) + 3px);right:9px;width:auto;top:0;bottom:0;
+  line-height:26px;text-align:right;font-size:9.5px;
+}
+.tag.mit-notiz .wt{display:none}
+
+/* Besondere Termine (Fortbildung, Kongress, Dienstreise): ein schraffierter
+   Streifen am rechten Zellenrand in der Farbe der Person. Schraffiert statt
+   gefüllt, weil das Gegenteil eines Urlaubsbalkens gemeint ist — der Tag ist
+   belegt, nicht frei. Der Streifen sitzt dort, wo bis dahin das Notizband lag:
+   seit die Beschriftung senkrecht über den ganzen Block läuft, zeigt sie dessen
+   Ausdehnung selbst, ein zweites Band dafür war überflüssig. */
+.tag .terminspur{position:absolute;right:0;top:0;bottom:0;width:8px;pointer-events:none}
+.tag .terminspur i{
+  position:absolute;right:1px;width:5px;z-index:3;
+  background:repeating-linear-gradient(45deg,
+    var(--f-voll) 0 2px, rgba(255,255,255,.72) 2px 4px);
+  box-shadow:inset 0 0 0 1px var(--f-voll);
+}
+/* Konflikt bewusst VOLL rot statt schraffiert: eine warme Personenfarbe mit
+   Schraffur und ein rotes Schraffurmuster sind bei 5 px Breite kaum zu
+   unterscheiden, gefüllt gegen gestreift dagegen sofort. */
+.tag .terminspur i.konflikt{
+  background:var(--warn);
+  box-shadow:inset 0 0 0 1px #7E2A2A;
+}
+.tag .notiz.termintext{color:#6A635A;font-style:italic}
+.pinsel.termin .punkt{
+  width:7px;height:16px;border-radius:3px;
+  background:repeating-linear-gradient(45deg,
+    var(--f-voll) 0 2px, rgba(255,255,255,.72) 2px 4px);
+  box-shadow:inset 0 0 0 1px var(--f-voll);
+}
+.legende-eintrag .probe-termin{
+  background:repeating-linear-gradient(45deg,#2F7D64 0 2px, #FFFFFF 2px 4px);
+  box-shadow:inset 0 0 0 1px #2F7D64;border:0;
+}
+.sf-liste li select{
+  min-width:0;padding:2px 4px;border:1px solid var(--linie-stark);
+  border-radius:4px;background:var(--bg);font-size:12px;
+}
+
+/* ---------- Hinweise ---------- */
+#hinweisListe{list-style:none;margin:0;padding:0}
+#hinweisListe li{display:flex;gap:7px;font-size:12.5px;line-height:1.35;margin-bottom:9px}
+#hinweisListe li:last-child{margin-bottom:0}
+#hinweisListe li .zeichen{flex:0 0 auto;width:13px;text-align:center}
+#hinweisListe li.warn{color:#7E2A2A}
+#hinweisListe li.ok{color:var(--akzent)}
+#hinweisListe li.info{color:var(--text-schwach)}
+.zeile.hat-luecken span{color:var(--warn)}
+
+/* ---------- Schulfreie Tage pflegen ---------- */
+.sf-liste{list-style:none;margin:0 0 10px;padding:0}
+.sf-liste li{display:flex;align-items:center;gap:7px;font-size:12.5px;margin-bottom:5px}
+.sf-liste li .sf-datum{font-variant-numeric:tabular-nums;color:var(--text-schwach)}
+.sf-liste li .sf-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sf-liste li .sf-weg{
+  border:0;background:none;cursor:pointer;color:var(--warn);font-size:15px;line-height:1;padding:0 2px;
+}
+.reihe{display:flex;gap:6px;margin-bottom:7px}
+.reihe input{
+  min-width:0;padding:3px 6px;border:1px solid var(--linie-stark);border-radius:4px;background:var(--bg);
+}
+.reihe input[type=date]{flex:0 0 auto}
+.reihe input[type=text]{flex:1 1 auto}
+.btn.mini{padding:4px 10px;font-size:12.5px}
+
+/* ---------- Notizfeld ---------- */
+#notizBox{
+  position:absolute;z-index:60;display:none;width:252px;
+  background:var(--flaeche);border:1px solid var(--linie-stark);border-radius:8px;
+  padding:12px 13px;box-shadow:0 10px 28px rgba(0,0,0,.16);
+}
+#notizBox.an{display:block}
+#notizBox h3{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--text-schwach);margin:0 0 8px;font-weight:600}
+#notizBox input[type=text]{
+  width:100%;padding:5px 7px;border:1px solid var(--linie-stark);border-radius:4px;background:var(--bg);
+}
+#notizBox .block{display:flex;align-items:center;gap:6px;font-size:11.5px;
+  color:var(--text-schwach);margin-top:8px;cursor:pointer}
+#notizBox .knoepfe{display:flex;gap:6px;margin-top:10px}
+
+/* ---------- Ferien malen und Blöcke benennen ---------- */
+.pinsel.ferien .punkt{
+  width:15px;height:14px;border-radius:3px;background:var(--tag-frei);
+  box-shadow:inset 0 0 0 1px var(--linie-stark);
+}
+.sf-liste li input.benennen{
+  flex:1 1 auto;min-width:0;padding:2px 5px;background:var(--bg);
+  border:1px solid var(--linie);border-radius:4px;font-size:12px;
+}
+.sf-liste li input.benennen:focus{border-color:var(--akzent);outline:none}
+.sf-liste li input.benennen::placeholder{color:#A9A296;font-style:italic}
+.sf-liste li .punkte{display:flex;gap:2px;flex:0 0 auto}
+.sf-liste li .punkte i{width:4px;height:13px;border-radius:2px;background:var(--f)}
+
+/* ---------- Jahres-Umschalter und Ferienpflege (Phase 3) ---------- */
+/* Bilanz im Kopf: sie klebt mit der Werkzeugleiste oben und bleibt damit
+   auch beim Malen weit unten im Jahr sichtbar. Wird das Fenster schmal,
+   weicht zuerst die Ortszeile — sie ist Schmuck, die Zahlen sind es nicht.
+   Sonst bricht der Kopf auf zwei Zeilen um und nimmt dem Raster die Höhe. */
+@media screen and (max-width:1500px){ #kopfOrt{display:none} }
+/* Bilanz im Kopf: sie klebt mit der Werkzeugleiste oben und bleibt damit
+   auch beim Malen weit unten im Jahr sichtbar. */
+#kopfBilanz{display:flex;align-items:center;gap:16px;font-size:13px}
+#kopfBilanz .kb{display:flex;align-items:center;gap:6px;white-space:nowrap}
+#kopfBilanz .punkt{width:5px;height:16px;border-radius:3px;background:var(--f)}
+#kopfBilanz b{font-size:15px;font-variant-numeric:tabular-nums}
+#kopfBilanz .von{color:var(--text-schwach);font-variant-numeric:tabular-nums}
+#kopfBilanz .kb.ueber b,#kopfBilanz .kb.ueber .von{color:var(--warn)}
+
+/* Zustandssymbol des Abgleichs im Kopf — dieselbe Sprache wie die Hinweise:
+   Farbe plus Zeichen, nie Farbe allein. */
+.btn.ikon{padding:4px 9px;font-size:15px;line-height:1.2}
+#syncBtn[data-st=ok]{color:var(--akzent);border-color:var(--akzent)}
+#syncBtn[data-st=wait]{color:#8A6D1F;border-color:#D9C27A}
+#syncBtn[data-st=busy]{color:var(--text-schwach)}
+#syncBtn[data-st=err]{color:var(--warn);border-color:var(--warn)}
+#syncBtn[data-st=off]{color:var(--text-schwach)}
+#karteSync .reihe input{width:100%}
+#syncMsg.warn{color:#7E2A2A}
+#syncMsg.ok{color:var(--akzent)}
+
+#jahrWahl{
+  border:1px solid var(--linie-stark);border-radius:6px;background:var(--flaeche);
+  padding:2px 6px;font-size:18px;font-weight:600;cursor:pointer;
+}
+#karteFerien.erfassen{border-color:var(--warn);background:#FFFCFB}
+#ferienStatus{margin:0 0 9px}
+#ferienStatus.warn{color:#7E2A2A}
+.sf-liste li .sf-quelle{
+  font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-schwach);
+  border:1px solid var(--linie);border-radius:3px;padding:0 4px;flex:0 0 auto;
+}
+#ferienForm{border-top:1px solid var(--linie);margin-top:9px;padding-top:9px}
+#ferienForm[hidden]{display:none}
+.knopfreihe{display:flex;gap:6px;flex-wrap:wrap}
+.lade{opacity:.55;pointer-events:none}
+
+/* ============================================================
+   Druckbild (KONZEPT §7) — eine Seite A4 quer.
+   Links das Jahresraster, rechts Bilanz, Hinweise und Legende.
+   ============================================================ */
+@page{ size:A4 landscape; margin:8mm; }
+.nur-druck{display:none}
+
+@media print{
+  /* Der Sticky-Kopf löst sich auf, damit header direkt im Seitenraster liegt. */
+  #kopfbereich{display:contents;position:static;box-shadow:none}
+  /* Farbflächen und Muster müssen mitgedruckt werden. */
+  *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  html,body{background:#fff}
+  body{font-size:9px;max-width:none;padding:0}
+  .nur-druck{display:inline}
+
+  /* Bedienelemente haben auf Papier nichts zu suchen. */
+  #werkzeuge,#notizBox,#speicherWarnung,.kopf-aktionen,#karteSpeicher,
+  #karteFerien,#karteSchulfrei,#karteReisen,#karteTermine,#karteSync,#karteHaushalt,
+  #legendeHinweis,#btnRueckgaengig,#syncBtn,
+  #ferienForm,#schulfreiForm,.sf-weg,#jahrWahl,.nicht-drucken{display:none !important}
+
+  /* main löst sich auf, damit Raster, Seitenleiste und Legende direkt im
+     Seitenraster liegen: links das Kalenderblatt, rechts die Auswertung. */
+  body{
+    display:grid;grid-template-columns:1fr 62mm;grid-template-rows:auto auto 1fr;
+    grid-template-areas:"kopf kopf" "raster rand" "raster legende";
+    column-gap:4mm;
+  }
+  main{display:contents}
+  header{grid-area:kopf;padding:0 0 2mm;border-bottom:1px solid var(--linie);gap:8px}
+  header h1{font-size:13px}
+  header h1 small{font-size:9px;margin-left:6px}
+  #rasterBereich{grid-area:raster;min-width:0}
+  #seitenleiste{grid-area:rand;flex:none;width:auto;gap:2.5mm}
+  #legende{grid-area:legende;margin:2.5mm 0 0;padding:2mm 2.5mm;max-width:none}
+
+  /* Kein Umbruch mitten im Kalender oder in einer Karte. */
+  #raster,.tag,.karte,#legende,#bilanzPersonen{break-inside:avoid;page-break-inside:avoid}
+
+  /* Raster auf Seitenhöhe: 31 Zeilen à 5,6 mm füllen das Blatt fast genau aus
+     (194 mm Satzspiegel). Mehr geht nicht, ohne eine zweite Seite zu riskieren. */
+  #raster{gap:.4px;border-radius:0}
+  .kopfzelle{font-size:7.5px;padding:1px 0}
+  .tagnummer{font-size:7px;padding-top:1px}
+  .tag{height:5.6mm}
+  .tag .wt{font-size:7px}
+  .tag .notiz{font-size:6.5px;line-height:9px;width:9px;right:6px;top:1px}
+  .tag .notiz.quer{line-height:5.6mm;left:calc(var(--feld) + 2px);right:5px;font-size:6.5px}
+  .tag .terminspur{width:5px}
+  .tag .terminspur i{width:3px;right:1px}
+  .tag.heute{outline:none}
+
+  /* §7: Balken auf Papier kräftiger — am Bildschirm bleiben sie bewusst
+     pastellig (§4). Deshalb hier die Deckkraft anheben und verbreitern,
+     statt die Bildschirmfarben zu ändern. */
+  #raster{--balken:9px;--zeile:calc(5.6mm + .4px)}
+  .balken i{background:var(--f-druck)}
+  .legende-eintrag .streifen{background:var(--f-druck);width:7px;height:12px}
+
+  /* Lücken: Umrandung und Schraffur kräftiger, damit sie auch in
+     Graustufen und ohne Hintergrundgrafiken tragen. */
+  .tag.luecke{box-shadow:inset 0 0 0 1.4px var(--warn)}
+  .tag.luecke::before{
+    background:repeating-linear-gradient(45deg,
+      rgba(178,59,59,.42) 0 2px, rgba(178,59,59,0) 2px 5px);
+  }
+  .tag:hover{box-shadow:none}
+
+  .karte{padding:2mm 2.5mm;border-radius:3px}
+  .karte h2{font-size:8px;margin-bottom:1.5mm}
+  .person{margin-bottom:1.2mm;gap:5px}
+  .person .punkt{background:var(--f-druck)}
+  .person .zahl b{font-size:11px}
+  .person input[type=number]{
+    border:0;background:none;padding:0;width:auto;-webkit-appearance:none;appearance:none;
+  }
+  .rest{font-size:8px;margin:-1mm 0 1.5mm 13px}
+  .zeile{font-size:8.5px;margin-bottom:1mm}
+  .trenner{margin:1.5mm 0}
+  .fussnote{font-size:7px;margin-top:1.5mm}
+  #hinweisListe li{font-size:8px;margin-bottom:1.2mm}
+  /* Der Platz auf dem Blatt ist endlich — die wichtigsten Hinweise stehen oben. */
+  #hinweisListe li:nth-child(n+9){display:none}
+  .sf-liste li{font-size:8px;margin-bottom:.8mm}
+  #legende h2{font-size:8px;margin-bottom:1.5mm}
+  .legende-liste{gap:1mm 4mm;font-size:8px}
+  .legende-eintrag .feld{width:12px;height:10px}
+}
+</style>
+</head>
+<body>
+
+<div id="kopfbereich">
+
+<div id="speicherWarnung">
+  <b>Achtung:</b> Dieser Browser speichert für diese Datei nichts dauerhaft
+  (localStorage nicht verfügbar). Alle Eingaben gehen beim Schließen verloren —
+  sichere den Stand über <b>Backup sichern</b>.
+</div>
+
+<header>
+  <h1>Urlaubsplaner
+    <select id="jahrWahl" title="Planjahr wechseln"></select>
+    <span class="nur-druck" id="kopfJahrDruck">2027</span><small id="kopfOrt"></small>
+  </h1>
+  <span id="kopfBilanz" class="nicht-drucken"></span>
+  <span class="nur-druck" id="kopfDruckDatum"></span>
+  <div class="kopf-aktionen">
+    <button class="btn ikon" id="syncBtn" data-st="off" title="Online-Abgleich nicht eingerichtet">☁</button>
+    <button class="btn" id="btnRueckgaengig" title="Letzte Änderung zurücknehmen (Strg+Z)" disabled>↶ Rückgängig</button>
+    <button class="btn" id="btnDruck" title="Öffnet den Druckdialog — dort „Hintergrundgrafiken“ aktivieren">PDF / Drucken</button>
+    <button class="btn" id="btnExport">Backup sichern</button>
+    <button class="btn" id="btnImport">Backup laden</button>
+    <input type="file" id="dateiImport" accept="application/json,.json" hidden>
+  </div>
+</header>
+
+<div id="werkzeuge">
+  <span class="label">Malen mit:</span>
+  <span id="pinselListe"></span>
+  <span class="rechts">
+    <label class="schalter" title="Lücken im Raster rot umranden und schraffieren">
+      <input type="checkbox" id="schalterLuecken"> Lückenanalyse
+    </label>
+  </span>
+</div>
+
+</div><!-- /kopfbereich -->
+
+<main>
+  <div id="rasterBereich"><div id="raster"></div></div>
+
+  <aside id="seitenleiste">
+    <section class="karte">
+      <h2>Bilanz</h2>
+      <div id="bilanzPersonen"></div>
+      <hr class="trenner">
+      <div class="zeile"><span>Betreuungspflichtige Werktage</span><span id="zahlFerienwerktage">–</span></div>
+      <div class="zeile"><span>davon abgedeckt</span><span id="zahlAbgedeckt">–</span></div>
+      <div class="zeile" id="zeileLuecken"><span>⚠ Lücken</span><span id="zahlLuecken">–</span></div>
+      <hr class="trenner">
+      <div class="zeile"><span>Gemeinsame Urlaubstage</span><span id="zahlDoppel">–</span></div>
+      <div class="zeile"><span>Budget dafür</span><span id="zahlBudget">–</span></div>
+      <div class="zeile"><span>Urlaubstage gesamt</span><span id="zahlAnspruchGesamt">–</span></div>
+      <p class="fussnote">
+        Verbraucht wird ein Urlaubstag nur an Werktagen Mo–Fr ohne gesetzlichen
+        Feiertag. Einträge am Wochenende oder Feiertag bleiben sichtbar, zählen
+        aber nicht.
+      </p>
+    </section>
+
+    <section class="karte">
+      <h2>Hinweise</h2>
+      <ul id="hinweisListe"></ul>
+    </section>
+
+    <section class="karte" id="karteReisen">
+      <h2>Reisen und Urlaubsblöcke</h2>
+      <ul class="sf-liste" id="reiseListe"></ul>
+      <p class="fussnote" id="reiseHinweis"></p>
+    </section>
+
+    <section class="karte" id="karteTermine">
+      <h2>Besondere Termine</h2>
+      <ul class="sf-liste" id="terminListe"></ul>
+      <div id="terminForm">
+        <div class="reihe">
+          <input type="text" id="terminName" placeholder="Bezeichnung, z. B. DGAV-Kongress" maxlength="40">
+        </div>
+        <div class="reihe">
+          <input type="date" id="terminVon" title="erster Tag">
+          <input type="date" id="terminBis" title="letzter Tag">
+        </div>
+        <div class="reihe">
+          <select id="terminPersonWahl" title="Wen betrifft der Termin?"></select>
+          <button class="btn mini" id="btnTermin">Hinzufügen</button>
+        </div>
+      </div>
+      <p class="fussnote">
+        Fortbildung, Kongress, Dienstreise — Tage, an denen diese Person keinen
+        Urlaub nehmen kann. Sie kosten keinen Urlaubstag und decken keine
+        Betreuung ab; liegt dort trotzdem Urlaub, steht es in den Hinweisen.
+      </p>
+    </section>
+
+    <section class="karte" id="karteFerien">
+      <h2>Ferienzeiten <span id="ferienJahr"></span></h2>
+      <p class="fussnote" id="ferienStatus"></p>
+      <ul class="sf-liste" id="ferienListe"></ul>
+      <div class="knopfreihe nicht-drucken">
+        <button class="btn mini" id="btnFerienApi">Online nachladen</button>
+        <button class="btn mini" id="btnFerienEigen">Selbst erfassen</button>
+      </div>
+      <div id="ferienForm" hidden>
+        <div class="reihe">
+          <input type="text" id="ferienName" placeholder="Bezeichnung, z. B. Osterferien" maxlength="40">
+        </div>
+        <div class="reihe">
+          <input type="date" id="ferienVon" title="erster Ferientag">
+          <input type="date" id="ferienBis" title="letzter Ferientag">
+        </div>
+        <button class="btn mini" id="btnFerien">Ferienblock hinzufügen</button>
+        <p class="fussnote">
+          Eingebaute Termine sind fest. Online geladene lassen sich beim nächsten
+          Abruf erneuern; selbst erfasste bleiben dabei unangetastet.
+        </p>
+      </div>
+    </section>
+
+    <section class="karte" id="karteSchulfrei">
+      <h2>Zusätzliche schulfreie Tage</h2>
+      <ul class="sf-liste" id="schulfreiListe"></ul>
+      <div id="schulfreiForm">
+        <div class="reihe">
+          <input type="date" id="schulfreiDatum">
+          <input type="text" id="schulfreiName" placeholder="Bezeichnung" maxlength="40">
+        </div>
+        <button class="btn mini" id="btnSchulfrei">Hinzufügen</button>
+      </div>
+      <p class="fussnote">
+        Für bewegliche Ferientage, Pädagogischen Tag oder Fasnet. Selbst erfasste
+        Tage lassen sich wieder entfernen, eingebaute Termine nicht.
+      </p>
+    </section>
+
+    <section class="karte" id="karteHaushalt">
+      <h2>Haushalt und Namen</h2>
+      <div class="reihe">
+        <input type="text" id="feldKind" placeholder="Name des Kindes" maxlength="30">
+        <input type="text" id="feldOrt" placeholder="Ort (optional)" maxlength="30">
+      </div>
+      <ul class="sf-liste" id="namenListe"></ul>
+      <p class="fussnote">
+        Diese Angaben liegen nur auf deinen Geräten und im verschlüsselten
+        Backup — der Quelltext des Planers kennt sie nicht.
+      </p>
+    </section>
+
+    <section class="karte" id="karteSync">
+      <h2>Online-Abgleich</h2>
+      <p class="fussnote" id="syncMsg"></p>
+      <div class="reihe">
+        <input type="text" id="syncRepo" placeholder="besitzer/urlaubsplaner-backup"
+               autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="reihe">
+        <input type="password" id="syncToken" placeholder="github_pat_…"
+               autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="reihe">
+        <input type="password" id="syncPw" placeholder="Passwort, auf allen Geräten gleich"
+               autocomplete="current-password">
+      </div>
+      <div class="knopfreihe">
+        <button class="btn mini" id="syncSave">Verbinden</button>
+        <button class="btn mini" id="syncNow">Jetzt abgleichen</button>
+        <button class="btn mini" id="syncVorher" hidden>Stand vor dem Abgleich</button>
+      </div>
+      <p class="fussnote">
+        Legt eine <b>verschlüsselte</b> Datei in einem <b>privaten</b> GitHub-Repo ab
+        und gleicht sie zwischen deinen Geräten ab. Token und Passwort bleiben nur
+        auf diesem Gerät und stehen in keinem Backup. Für den Token reicht ein
+        Fine-grained-PAT, der <b>nur</b> auf dieses eine Repo zeigt, mit der
+        Berechtigung „Contents: Read and write“.
+      </p>
+    </section>
+
+    <section class="karte" id="karteSpeicher">
+      <h2>Speicher</h2>
+      <div class="zeile"><span>Zuletzt gesichert</span><span id="zeitGespeichert">–</span></div>
+      <p class="fussnote">
+        Der Stand wird automatisch im Browser gespeichert. Für den Austausch
+        und als echte Sicherung dient die Backup-Datei.
+      </p>
+    </section>
+  </aside>
+</main>
+
+<section id="legende">
+  <h2>Legende</h2>
+  <div class="legende-liste" id="legendeListe"></div>
+  <p class="fussnote" id="legendeHinweis"></p>
+  <p class="fussnote nicht-drucken" id="druckHinweis">
+    <b>Für den Ausdruck:</b> „PDF / Drucken“ öffnet den Druckdialog. Dort unter den
+    weiteren Einstellungen <b>Hintergrundgrafiken</b> aktivieren — sonst fehlen die
+    Tagestyp-Flächen und die Balken. Format A4 quer, eine Seite.
+  </p>
+</section>
+
+<div id="notizBox">
+  <h3 id="notizTitel"></h3>
+  <input type="text" id="notizText" maxlength="60" placeholder="z. B. Gardasee">
+  <label class="block" id="notizBlockZeile" hidden>
+    <input type="checkbox" id="notizBlock"> <span id="notizBlockText"></span>
+  </label>
+  <div class="knoepfe">
+    <button class="btn mini" id="notizOk">Übernehmen</button>
+    <button class="btn mini" id="notizWeg">Entfernen</button>
+    <button class="btn mini" id="notizAbbruch">Abbrechen</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Urlaubsplaner — Phase 1 (Fundament und Planen)
+   Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
+   ============================================================ */
+
+const SCHEMA_VERSION = 1;
+const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
+const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+const WOCHENTAGE = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+
+/* ------------------------------------------------------------
+   Eingebettete Feriendaten Baden-Württemberg
+   Verifiziert am 2026-09-19 (KONZEPT.md R1) über mehrere unabhängige
+   Sekundärquellen — kalenderpedia.de, schulferien.org, profiling-
+   institut.de, erlebe-bw.de, schulferiendaten.de. Die Primärquelle
+   km.baden-wuerttemberg.de war über den Netzwerk-Proxy nicht erreichbar;
+   vor dem Ernstfall bitte dort gegenprüfen. Die Feiertage werden nicht
+   eingebettet, sondern aus dem Ostersonntag exakt berechnet.
+   Die Termine sind als Kalenderjahr-Abschnitte abgelegt: ein
+   Ferienblock, der über den Jahreswechsel läuft, erscheint in
+   beiden Jahren mit seinem jeweiligen Teilzeitraum.
+   ------------------------------------------------------------ */
+const FERIEN_BW = {
+  2027: [
+    { name:"Weihnachtsferien 2026/27", von:"2027-01-01", bis:"2027-01-09" },
+    { name:"Osterferien",              von:"2027-03-30", bis:"2027-04-03" },
+    { name:"Pfingstferien",            von:"2027-05-18", bis:"2027-05-29" },
+    { name:"Sommerferien",             von:"2027-07-29", bis:"2027-09-11" },
+    { name:"Herbstferien",             von:"2027-11-02", bis:"2027-11-06" },
+    { name:"Weihnachtsferien 2027/28", von:"2027-12-23", bis:"2027-12-31" }
+  ],
+  2028: [
+    { name:"Weihnachtsferien 2027/28", von:"2028-01-01", bis:"2028-01-08" },
+    { name:"Osterferien",              von:"2028-04-18", bis:"2028-04-22" },
+    { name:"Pfingstferien",            von:"2028-06-06", bis:"2028-06-17" },
+    { name:"Sommerferien",             von:"2028-07-27", bis:"2028-09-09" },
+    { name:"Herbstferien",             von:"2028-10-30", bis:"2028-11-03" },
+    { name:"Weihnachtsferien 2028/29", von:"2028-12-23", bis:"2028-12-31" }
+  ]
+};
+
+/* Landesweit unterrichtsfrei, aber kein gesetzlicher Feiertag. */
+const SCHULFREI_BW = {
+  2027: [ { name:"Gründonnerstag", datum:"2027-03-25" } ],
+  2028: [ { name:"Gründonnerstag", datum:"2028-04-13" } ]
+};
+
+/* ------------------------------------------------------------
+   Datumshelfer
+   ------------------------------------------------------------ */
+function iso(d){
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const t = String(d.getDate()).padStart(2,"0");
+  return d.getFullYear() + "-" + m + "-" + t;
+}
+function ausIso(s){
+  const [j,m,t] = s.split("-").map(Number);
+  return new Date(j, m-1, t);
+}
+function plusTage(d, n){
+  const k = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  k.setDate(k.getDate()+n);
+  return k;
+}
+function lang(s){
+  const d = ausIso(s);
+  return WOCHENTAGE[d.getDay()] + ", " + String(d.getDate()).padStart(2,"0") + "." +
+         String(d.getMonth()+1).padStart(2,"0") + "." + d.getFullYear();
+}
+
+/* Ostersonntag nach dem anonymen gregorianischen Algorithmus. */
+function ostersonntag(jahr){
+  const a = jahr % 19, b = Math.floor(jahr/100), c = jahr % 100;
+  const d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
+  const g = Math.floor((b-f+1)/3), h = (19*a + b - d - g + 15) % 30;
+  const i = Math.floor(c/4), k = c % 4;
+  const l = (32 + 2*e + 2*i - h - k) % 7;
+  const m = Math.floor((a + 11*h + 22*l)/451);
+  const monat = Math.floor((h + l - 7*m + 114)/31);
+  const tag = ((h + l - 7*m + 114) % 31) + 1;
+  return new Date(jahr, monat-1, tag);
+}
+
+/* Gesetzliche Feiertage Baden-Württemberg — exakt berechnet. */
+function feiertageBW(jahr){
+  const o = ostersonntag(jahr);
+  return [
+    { name:"Neujahr",                   datum: jahr+"-01-01" },
+    { name:"Heilige Drei Könige",       datum: jahr+"-01-06" },
+    { name:"Karfreitag",                datum: iso(plusTage(o,-2)) },
+    { name:"Ostermontag",               datum: iso(plusTage(o, 1)) },
+    { name:"Tag der Arbeit",            datum: jahr+"-05-01" },
+    { name:"Christi Himmelfahrt",       datum: iso(plusTage(o,39)) },
+    { name:"Pfingstmontag",             datum: iso(plusTage(o,50)) },
+    { name:"Fronleichnam",              datum: iso(plusTage(o,60)) },
+    { name:"Tag der Deutschen Einheit", datum: jahr+"-10-03" },
+    { name:"Allerheiligen",             datum: jahr+"-11-01" },
+    { name:"1. Weihnachtsfeiertag",     datum: jahr+"-12-25" },
+    { name:"2. Weihnachtsfeiertag",     datum: jahr+"-12-26" }
+  ];
+}
+
+/* Pastellton: die Ressourcenfarbe halbtransparent über dem Tagestyp-Hintergrund.
+   Der Farbton bleibt damit die Identität der Ressource, die Fläche wird ruhig
+   und der Tagestyp scheint durch. */
+function pastell(hex, alpha){
+  const h = hex.replace("#","");
+  const r = parseInt(h.substring(0,2),16);
+  const g = parseInt(h.substring(2,4),16);
+  const b = parseInt(h.substring(4,6),16);
+  return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+}
+
+/* Bildschirm- und Druckton einer Ressource als Custom Properties am Element.
+   Das Stylesheet greift über var(--f) bzw. var(--f-druck) darauf zu — nur so
+   kann der @media-print-Block die Balken kräftiger machen (§7), ohne dass die
+   bewusst pastelligen Bildschirmfarben (§4) angefasst werden. */
+const ALPHA_BILDSCHIRM = 0.62;
+const ALPHA_DRUCK      = 0.9;
+function farbeSetzen(el, hex){
+  el.style.setProperty("--f",       pastell(hex, ALPHA_BILDSCHIRM));
+  el.style.setProperty("--f-druck", pastell(hex, ALPHA_DRUCK));
+  el.style.setProperty("--f-voll",  hex);
+}
+
+/* ------------------------------------------------------------
+   Zustand
+   ------------------------------------------------------------ */
+function standardZustand(){
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    app: "urlaubsplaner",
+    savedAt: null,
+    settings: {
+      aktivesJahr: 2027,
+      bundesland: "DE-BW",
+      // Neutrale Vorgaben: die echten Namen trägt der Nutzer selbst ein und sie
+      // liegen danach nur im Gerätespeicher und im verschlüsselten Backup —
+      // nie im Quelltext, der öffentlich liegt.
+      ort: "",
+      kind: "das Kind",
+      luckenanalyseAktiv: true,
+      mindestVerplant: 25
+    },
+    personen: [
+      { id:"p1", name:"Ich",        farbe:"#2F7D64", anspruch:{ "2027":30 } },
+      { id:"p2", name:"Partner/in", farbe:"#C4703A", anspruch:{ "2027":30 } }
+    ],
+    betreuung: [
+      { id:"b1", name:"Großeltern",          farbe:"#7A6BA8" },
+      { id:"b2", name:"Ferienbetreuung",  farbe:"#4A8CBF" },
+      { id:"b3", name:"Ferienlager",         farbe:"#B8556E" }
+    ],
+    jahre: {}
+  };
+}
+
+let zustand = standardZustand();
+let tagIndex = {};          // ISO-Datum -> Tagesinfo des aktiven Jahres
+let pinsel = "p1";          // aktive Mal-Ressource oder "radieren"
+let maltGerade = false;
+
+/* Legt Ferien-, Feiertags- und Schulfrei-Daten eines Jahres an, ohne
+   bereits vorhandene (insbesondere manuell erfasste) Einträge zu verlieren. */
+function jahrSicherstellen(jahr){
+  const s = String(jahr);
+  if(!zustand.jahre[s]) zustand.jahre[s] = { ferien:[], feiertage:[], schulfrei:[], termine:[], eintraege:{} };
+  const j = zustand.jahre[s];
+  if(!Array.isArray(j.ferien))    j.ferien = [];
+  if(!Array.isArray(j.feiertage)) j.feiertage = [];
+  if(!Array.isArray(j.schulfrei)) j.schulfrei = [];
+  // Ältere Sicherungen kennen das Feld noch nicht.
+  if(!Array.isArray(j.termine))   j.termine = [];
+  if(!j.eintraege || typeof j.eintraege !== "object") j.eintraege = {};
+
+  // Eingebaute Datensätze auffüllen; "manuell" und "api" bleiben unberührt.
+  if(!j.ferien.some(f => f.quelle === "eingebaut") && FERIEN_BW[jahr]){
+    FERIEN_BW[jahr].forEach(f => j.ferien.push(Object.assign({}, f, { quelle:"eingebaut" })));
+  }
+  if(!j.feiertage.some(f => f.quelle === "eingebaut")){
+    feiertageBW(jahr).forEach(f => j.feiertage.push(Object.assign({}, f, { quelle:"eingebaut" })));
+  }
+  if(!j.schulfrei.some(f => f.quelle === "eingebaut") && SCHULFREI_BW[jahr]){
+    SCHULFREI_BW[jahr].forEach(f => j.schulfrei.push(Object.assign({}, f, { quelle:"eingebaut" })));
+  }
+  return j;
+}
+
+/* Baut die Tagesinfos des aktiven Jahres einmal auf (KONZEPT §6). */
+function tagIndexBauen(){
+  const jahr = zustand.settings.aktivesJahr;
+  const j = jahrSicherstellen(jahr);
+  const idx = {};
+
+  for(let d = new Date(jahr,0,1); d.getFullYear() === jahr; d = plusTage(d,1)){
+    const wt = d.getDay();
+    idx[iso(d)] = {
+      datum: iso(d),
+      wochentag: wt,
+      werktag: wt >= 1 && wt <= 5,
+      feiertag: null,
+      schulfrei: null,
+      termine: [],
+      betreuungspflichtig: false
+    };
+  }
+  j.feiertage.forEach(f => { if(idx[f.datum]) idx[f.datum].feiertag = f.name; });
+  // Ohne Bezeichnung gemalte Tage bekommen einen Platzhalternamen — sonst wäre
+  // der leere String falsy und der Tag fiele aus der Betreuungspflicht heraus.
+  j.schulfrei.forEach(f => {
+    if(idx[f.datum] && !idx[f.datum].schulfrei) idx[f.datum].schulfrei = f.name || "Schulfrei";
+  });
+  j.ferien.forEach(f => {
+    const bis = ausIso(f.bis);
+    for(let d = ausIso(f.von); d <= bis; d = plusTage(d,1)){
+      const k = idx[iso(d)];
+      if(k && !k.schulfrei) k.schulfrei = f.name || "Ferien";
+    }
+  });
+  // Besondere Termine sperren den Tag für Urlaub, ändern aber nichts an der
+  // Betreuungspflicht: wer auf einem Kongress ist, wäre sonst auch im Dienst.
+  j.termine.forEach(e => { if(idx[e.datum]) idx[e.datum].termine.push(e); });
+  Object.values(idx).forEach(t => {
+    t.betreuungspflichtig = t.werktag && !t.feiertag && !!t.schulfrei;
+  });
+  tagIndex = idx;
+}
+
+/* ------------------------------------------------------------
+   Rechenlogik (KONZEPT §6)
+   ------------------------------------------------------------ */
+function eintraege(){
+  return zustand.jahre[String(zustand.settings.aktivesJahr)].eintraege;
+}
+function anspruchVon(person){
+  const v = person.anspruch ? person.anspruch[String(zustand.settings.aktivesJahr)] : undefined;
+  return Number.isFinite(v) ? v : 30;
+}
+function urlaubsverbrauch(personId){
+  const e = eintraege();
+  let n = 0;
+  for(const datum in e){
+    const t = tagIndex[datum];
+    if(!t || !t.werktag || t.feiertag) continue;
+    if(e[datum].frei && e[datum].frei.indexOf(personId) !== -1) n++;
+  }
+  return n;
+}
+function anzahlBetreuungspflichtig(){
+  let n = 0;
+  for(const d in tagIndex) if(tagIndex[d].betreuungspflichtig) n++;
+  return n;
+}
+
+/* ------------------------------------------------------------
+   Phase 2 — Lückenanalyse und Hinweise (KONZEPT §6)
+   ------------------------------------------------------------ */
+function personIds(){ return zustand.personen.map(p => p.id); }
+function betreuungIds(){ return zustand.betreuung.map(b => b.id); }
+
+function freiAm(datum){
+  const e = eintraege()[datum];
+  return (e && Array.isArray(e.frei)) ? e.frei : [];
+}
+function notizVon(datum){
+  const e = eintraege()[datum];
+  return (e && typeof e.notiz === "string") ? e.notiz.trim() : "";
+}
+/* abgedeckt(d) = eintraege[d].frei ≠ ∅ — ein Tag mit bloßer Notiz zählt nicht. */
+function abgedeckt(datum){ return freiAm(datum).length > 0; }
+function istLuecke(datum){
+  const t = tagIndex[datum];
+  return !!t && t.betreuungspflichtig && !abgedeckt(datum);
+}
+function luecken(){
+  return Object.keys(tagIndex).sort().filter(istLuecke);
+}
+function anzahlAbgedeckt(){
+  return anzahlBetreuungspflichtig() - luecken().length;
+}
+
+/* Tage, an denen alle Eltern gleichzeitig frei sind und die betreuungspflichtig
+   sind: kosten zwei Urlaubstage, decken aber nur einen Betreuungstag ab (§1). */
+function doppelbelegungen(){
+  const ids = personIds();
+  if(ids.length < 2) return [];
+  return Object.keys(tagIndex).sort().filter(d => {
+    if(!tagIndex[d].betreuungspflichtig) return false;
+    const f = freiAm(d);
+    return ids.every(id => f.indexOf(id) !== -1);
+  });
+}
+/* Fremdbetreute betreuungspflichtige Tage — sie kosten keinen Urlaubstag. */
+function fremdbetreut(){
+  const bIds = betreuungIds();
+  return Object.keys(tagIndex).sort().filter(d => {
+    if(!tagIndex[d].betreuungspflichtig) return false;
+    const f = freiAm(d);
+    return bIds.some(id => f.indexOf(id) !== -1);
+  });
+}
+/* Wie viele gemeinsame Urlaubstage der Plan verträgt, ohne eine Lücke zu
+   erzwingen: Urlaubsanspruch minus der Last, die nach Abzug der fremdbetreuten
+   Tage bei den Eltern verbleibt. Für 2027 ohne Fremdbetreuung sind das 0 (§1). */
+function gemeinsamBudget(){
+  const anspruch = zustand.personen.reduce((s,p) => s + anspruchVon(p), 0);
+  return Math.max(0, anspruch - (anzahlBetreuungspflichtig() - fremdbetreut().length));
+}
+/* Urlaub an einem Tag, an dem das Kind ohnehin fremdbetreut ist. */
+function verschwendet(){
+  const pIds = personIds(), bIds = betreuungIds();
+  return Object.keys(tagIndex).sort().filter(d => {
+    const t = tagIndex[d];
+    if(!t.werktag || t.feiertag) return false;
+    const f = freiAm(d);
+    return pIds.some(id => f.indexOf(id) !== -1) && bIds.some(id => f.indexOf(id) !== -1);
+  });
+}
+/* Tage außerhalb des Jahres sind unbekannt und beenden die Kette — lieber einen
+   Brückentag am Jahresrand verschweigen als einen falschen behaupten. */
+function arbeitsfrei(datum){
+  const t = tagIndex[datum];
+  return !!t && (!t.werktag || !!t.feiertag);
+}
+function brueckentage(){
+  const res = [];
+  Object.keys(tagIndex).sort().forEach(datum => {
+    const t = tagIndex[datum];
+    if(!t.werktag || t.feiertag) return;
+    const d = ausIso(datum);
+    let links = 0, rechts = 0;
+    while(arbeitsfrei(iso(plusTage(d, -1-links)))) links++;
+    while(arbeitsfrei(iso(plusTage(d,  1+rechts)))) rechts++;
+    const kette = links + rechts + 1;
+    if(links > 0 && rechts > 0 && kette >= 4) res.push({ datum:datum, kette:kette });
+  });
+  return res;
+}
+
+/* ------------------------------------------------------------
+   Besondere Termine (Fortbildung, Kongress, Dienstreise)
+   ------------------------------------------------------------ */
+function termineAm(datum){
+  const t = tagIndex[datum];
+  return (t && t.termine.length) ? t.termine : [];
+}
+function terminVon(datum, personId){
+  return termineAm(datum).find(e => e.person === personId) || null;
+}
+/* Urlaub an einem Tag, an dem dieselbe Person einen Termin hat — genau das,
+   was der Planer verhindern soll. */
+function terminKonflikte(){
+  const raus = [];
+  Object.keys(tagIndex).sort().forEach(datum => {
+    const frei = freiAm(datum);
+    termineAm(datum).forEach(e => {
+      if(frei.indexOf(e.person) !== -1) raus.push({ datum:datum, termin:e });
+    });
+  });
+  return raus;
+}
+function terminKonflikt(datum){
+  const frei = freiAm(datum);
+  return termineAm(datum).some(e => frei.indexOf(e.person) !== -1);
+}
+/* Alle Termine einer Person zu zusammenhängenden Läufen gebündelt — die
+   Einheit, die einen Namen trägt. */
+function terminLaeufe(){
+  const j = jahrSicherstellen(zustand.settings.aktivesJahr);
+  const raus = [];
+  zustand.personen.forEach(person => {
+    const eigene = j.termine.filter(e => e.person === person.id && tagIndex[e.datum]);
+    laeufe(eigene.map(e => e.datum)).forEach(lauf => {
+      raus.push({
+        von: lauf.von, bis: lauf.bis, person: person,
+        eintraege: eigene.filter(e => lauf.tage.indexOf(e.datum) !== -1)
+      });
+    });
+  });
+  return raus.sort((a,b) => a.von < b.von ? -1 : 1);
+}
+
+/* ISO-Kalenderwoche (Mo als Wochenanfang, Woche 1 enthält den 4. Januar). */
+function isoKW(datum){
+  const d = ausIso(datum);
+  const do_ = plusTage(d, 3 - ((d.getDay()+6) % 7));
+  const jan4 = new Date(do_.getFullYear(), 0, 4);
+  const erster = plusTage(jan4, 3 - ((jan4.getDay()+6) % 7));
+  return 1 + Math.round((do_ - erster) / 604800000);
+}
+/* "1, 13–14, 31" statt einer endlosen Aufzählung. */
+function kwBereiche(datumsListe){
+  const kws = [];
+  datumsListe.forEach(d => { const k = isoKW(d); if(kws.indexOf(k) === -1) kws.push(k); });
+  kws.sort((a,b) => a-b);
+  const teile = [];
+  let i = 0;
+  while(i < kws.length){
+    let j = i;
+    while(j+1 < kws.length && kws[j+1] === kws[j]+1) j++;
+    teile.push(i === j ? String(kws[i]) : kws[i] + "–" + kws[j]);
+    i = j+1;
+  }
+  return teile;
+}
+function kurz(datum){
+  const d = ausIso(datum);
+  return String(d.getDate()).padStart(2,"0") + "." + String(d.getMonth()+1).padStart(2,"0") + ".";
+}
+function spanne(von, bis){
+  return von === bis ? kurz(von) : kurz(von) + "–" + kurz(bis);
+}
+
+/* Bündelt einzelne Tage zu zusammenhängenden Läufen. Gibt es eine
+   Brücken-Funktion, dürfen die von ihr bejahten Tage eine Lücke überspannen —
+   für Reisen sind das die arbeitsfreien Tage: ein Urlaub von Montag bis
+   übernächsten Freitag ist eine Reise und nicht zwei, nur weil das Wochenende
+   dazwischenliegt. Monatsgrenzen trennen hier bewusst nicht; sie sind eine
+   Eigenheit der Rasterdarstellung, keine des Kalenders. */
+function laeufe(datumsListe, bruecke){
+  const raus = [];
+  datumsListe.slice().sort().forEach(datum => {
+    const letzter = raus[raus.length-1];
+    if(letzter && datum > letzter.bis){
+      let d = iso(plusTage(ausIso(letzter.bis), 1));
+      const dazwischen = [];
+      while(d < datum && bruecke && bruecke(d)){
+        dazwischen.push(d);
+        d = iso(plusTage(ausIso(d), 1));
+      }
+      if(d === datum){
+        letzter.tage = letzter.tage.concat(dazwischen, [datum]);
+        letzter.bis = datum;
+        return;
+      }
+    }
+    if(letzter && datum === letzter.bis) return;
+    raus.push({ von:datum, bis:datum, tage:[datum] });
+  });
+  return raus;
+}
+
+/* Reisen: zusammenhängende Zeiträume, in denen mindestens ein Elternteil
+   Urlaub hat. Sie sind die Einheit, die einen Namen bekommt ("Gardasee"). */
+function reiseLaeufe(){
+  const pIds = personIds();
+  const e = eintraege();
+  const tage = Object.keys(e).filter(d =>
+    tagIndex[d] && Array.isArray(e[d].frei) && e[d].frei.some(id => pIds.indexOf(id) !== -1));
+  return laeufe(tage, arbeitsfrei);
+}
+/* Name einer Reise = die Notiz, die auf ihren Tagen steht. */
+function reiseName(lauf){
+  for(const d of lauf.tage){ const n = notizVon(d); if(n) return n; }
+  return "";
+}
+function reiseBenennen(lauf, text){
+  const e = eintraege();
+  lauf.tage.forEach(d => {
+    if(text){
+      if(!e[d]) e[d] = { frei:[] };
+      e[d].notiz = text;
+    }else if(e[d]){
+      delete e[d].notiz;
+      if(!e[d].frei || !e[d].frei.length) delete e[d];
+    }
+  });
+  zellenNeuZeichnen();
+  reisenZeichnen();
+  speichernGeplant();
+}
+
+/* ------------------------------------------------------------
+   Malen
+   ------------------------------------------------------------ */
+function ressourcen(){
+  return zustand.personen.concat(zustand.betreuung);
+}
+function ressourceFinden(id){
+  return ressourcen().find(r => r.id === id) || null;
+}
+/* Malt einen schulfreien Tag — zunächst ohne Bezeichnung. Benannt wird er
+   später in der Seitenleiste; für die Betreuungsrechnung zählt er sofort.
+   Eingebaute und online geladene Termine werden nie überschrieben. */
+function schulfreiMalen(datum){
+  const t = tagIndex[datum];
+  if(!t || t.schulfrei) return false;
+  jahrSicherstellen(zustand.settings.aktivesJahr)
+    .schulfrei.push({ name:"", datum:datum, quelle:"manuell" });
+  tagIndexBauen();
+  return true;
+}
+/* Radiert nur selbst gemalte Tage; fest hinterlegte bleiben. */
+function schulfreiRadieren(datum){
+  const j = jahrSicherstellen(zustand.settings.aktivesJahr);
+  const vorher = j.schulfrei.length;
+  j.schulfrei = j.schulfrei.filter(sf => !(sf.datum === datum && sf.quelle === "manuell"));
+  if(j.schulfrei.length === vorher) return false;
+  tagIndexBauen();
+  return true;
+}
+
+function manuellSchulfreiAm(datum){
+  const j = zustand.jahre[String(zustand.settings.aktivesJahr)];
+  return !!(j && j.schulfrei.some(sf => sf.datum === datum && sf.quelle === "manuell"));
+}
+
+/* Ein Strich hat eine Richtung: Sie wird am ersten Tag festgelegt und gilt bis
+   zum Loslassen. Liegt dort schon dieselbe Ressource, nimmt der ganze Strich
+   sie weg — sonst setzt er sie. Ohne diese Festlegung würde ein Zug über
+   gemischte Tage jeden Tag einzeln umschalten und das Ergebnis wäre
+   unvorhersehbar; jeder Tag wird deshalb auch nur einmal je Strich angefasst. */
+let strichModus   = "setzen";
+let strichBesucht = null;
+
+function strichBeginnen(datum){
+  strichBesucht = {};
+  if(pinsel === "radieren")    strichModus = "entfernen";
+  else if(pinsel === "ferien")  strichModus = manuellSchulfreiAm(datum) ? "entfernen" : "setzen";
+  else if(pinsel === "termin")  strichModus = terminVon(datum, terminPerson) ? "entfernen" : "setzen";
+  else                          strichModus = freiAm(datum).indexOf(pinsel) !== -1 ? "entfernen" : "setzen";
+}
+function strichBeenden(){ strichBesucht = null; }
+
+/* Termine gehören einer Person: gemalt wird für die zuletzt gewählte. */
+let terminPerson = "p1";
+
+function terminMalen(datum){
+  const j = jahrSicherstellen(zustand.settings.aktivesJahr);
+  if(j.termine.some(e => e.datum === datum && e.person === terminPerson)) return false;
+  j.termine.push({ name:"", datum:datum, person:terminPerson, quelle:"manuell" });
+  tagIndexBauen();
+  return true;
+}
+function terminRadieren(datum, personId){
+  const j = jahrSicherstellen(zustand.settings.aktivesJahr);
+  const vorher = j.termine.length;
+  j.termine = j.termine.filter(e => !(e.datum === datum &&
+                                      (!personId || e.person === personId)));
+  if(j.termine.length === vorher) return false;
+  tagIndexBauen();
+  return true;
+}
+
+function malen(datum){
+  if(!tagIndex[datum]) return;
+  if(!strichBesucht) strichBeginnen(datum);   // Einzelklick ohne Zug
+  if(strichBesucht[datum]) return;
+  strichBesucht[datum] = true;
+
+  const e = eintraege();
+
+  // Ferien: selbst gemalte Tage lassen sich mit demselben Pinsel wieder
+  // wegnehmen; fest hinterlegte und online geladene bleiben unberührt.
+  if(pinsel === "ferien"){
+    const geaendert = strichModus === "entfernen" ? schulfreiRadieren(datum) : schulfreiMalen(datum);
+    if(geaendert) zelleZeichnen(datum);
+    return;
+  }
+  if(pinsel === "termin"){
+    const geaendert = strichModus === "entfernen"
+      ? terminRadieren(datum, terminPerson) : terminMalen(datum);
+    if(geaendert) zelleNachbarnZeichnen(datum);
+    return;
+  }
+
+  if(pinsel === "radieren"){
+    // Radiert werden die Ressourcen; eine Notiz bleibt stehen, bis sie über das
+    // Notizfeld entfernt wird. War auf dem Tag keine Ressource, ist als Nächstes
+    // ein selbst gemalter Ferientag dran — so löscht ein Radierstrich nie
+    // versehentlich die Betreuungspflicht unter einem Urlaubstag weg.
+    // Radiert wird von oben nach unten: erst die Ressourcen, dann ein selbst
+    // gemalter Ferientag, zuletzt ein Termin. So löscht ein Strich nie
+    // versehentlich mehrere Ebenen auf einmal.
+    const hatteRessourcen = freiAm(datum).length > 0;
+    if(e[datum]){
+      e[datum].frei = [];
+      if(!notizVon(datum)) delete e[datum];
+    }
+    if(!hatteRessourcen && !schulfreiRadieren(datum) && terminRadieren(datum)) zelleNachbarnZeichnen(datum);
+    else if(!hatteRessourcen) zelleZeichnen(datum);
+  }else if(strichModus === "entfernen"){
+    if(e[datum] && Array.isArray(e[datum].frei)){
+      e[datum].frei = e[datum].frei.filter(id => id !== pinsel);
+      if(!e[datum].frei.length && !notizVon(datum)) delete e[datum];
+    }
+  }else{
+    if(!e[datum]) e[datum] = { frei:[] };
+    if(!Array.isArray(e[datum].frei)) e[datum].frei = [];
+    if(e[datum].frei.indexOf(pinsel) === -1) e[datum].frei.push(pinsel);
+  }
+  zelleNachbarnZeichnen(datum);
+}
+
+/* ------------------------------------------------------------
+   Rückgängig — Schnappschüsse des gesamten Zustands. Ein Strich, eine
+   Benennung, ein gelöschter Ferienblock sind je ein Schritt.
+   ------------------------------------------------------------ */
+const UNDO_TIEFE = 40;
+let undoStapel = [];
+
+function merken(){
+  try{
+    undoStapel.push(JSON.stringify(zustand));
+    if(undoStapel.length > UNDO_TIEFE) undoStapel.shift();
+  }catch(err){
+    console.warn("Rückgängig-Schnappschuss nicht möglich:", err);
+  }
+  undoKnopfZeichnen();
+}
+function rueckgaengig(){
+  if(!undoStapel.length) return false;
+  let vorher;
+  try{
+    vorher = JSON.parse(undoStapel.pop());
+  }catch(err){
+    return false;
+  }
+  zustand = vorher;
+  notizSchliessen();
+  tagIndexBauen();
+  allesZeichnen();
+  speichernGeplant();
+  return true;
+}
+function undoKnopfZeichnen(){
+  const k = document.getElementById("btnRueckgaengig");
+  if(k) k.disabled = undoStapel.length === 0;
+}
+
+/* ------------------------------------------------------------
+   Persistenz
+   ------------------------------------------------------------ */
+let speicherVerfuegbar = false;
+let speicherTimer = null;
+
+function speicherPruefen(){
+  try{
+    const probe = "__up_probe__";
+    window.localStorage.setItem(probe, "1");
+    window.localStorage.removeItem(probe);
+    return true;
+  }catch(err){
+    return false;
+  }
+}
+function speichernGeplant(){
+  if(!speicherVerfuegbar) return;
+  clearTimeout(speicherTimer);
+  speicherTimer = setTimeout(speichern, 350);
+}
+function speichern(){
+  if(!speicherVerfuegbar) return;
+  try{
+    zustand.savedAt = new Date().toISOString();
+    window.localStorage.setItem(SPEICHER_SCHLUESSEL, JSON.stringify(zustand));
+    zeitAnzeigen();
+    syncNachAenderung();
+  }catch(err){
+    speicherVerfuegbar = false;
+    warnungAnzeigen();
+    console.warn("Speichern fehlgeschlagen:", err);
+  }
+}
+function laden(){
+  if(!speicherVerfuegbar) return false;
+  try{
+    const roh = window.localStorage.getItem(SPEICHER_SCHLUESSEL);
+    if(!roh) return false;
+    const obj = JSON.parse(roh);
+    const geprueft = uebernehmen(obj);
+    if(!geprueft) return false;
+    zustand = geprueft;
+    return true;
+  }catch(err){
+    console.warn("Laden fehlgeschlagen:", err);
+    return false;
+  }
+}
+
+/* Prüft und migriert ein eingelesenes Objekt auf das aktuelle Schema. */
+function uebernehmen(obj){
+  if(!obj || typeof obj !== "object") return null;
+  if(obj.app !== "urlaubsplaner") return null;
+  const version = Number(obj.schemaVersion);
+  if(!Number.isFinite(version) || version < 1) return null;
+  if(version > SCHEMA_VERSION){
+    alert("Diese Sicherung stammt aus einer neueren Version des Urlaubsplaners " +
+          "(Schema " + version + " statt " + SCHEMA_VERSION + ") und kann nicht geladen werden.");
+    return null;
+  }
+  const basis = standardZustand();
+  const neu = {
+    schemaVersion: SCHEMA_VERSION,
+    app: "urlaubsplaner",
+    savedAt: obj.savedAt || null,
+    settings: Object.assign(basis.settings, obj.settings || {}),
+    personen: Array.isArray(obj.personen) && obj.personen.length ? obj.personen : basis.personen,
+    betreuung: Array.isArray(obj.betreuung) && obj.betreuung.length ? obj.betreuung : basis.betreuung,
+    jahre: (obj.jahre && typeof obj.jahre === "object") ? obj.jahre : {}
+  };
+  neu.settings.aktivesJahr = Number(neu.settings.aktivesJahr) || 2027;
+  neu.settings.luckenanalyseAktiv = neu.settings.luckenanalyseAktiv !== false;
+  neu.settings.mindestVerplant = Number(neu.settings.mindestVerplant) || 25;
+  if(typeof neu.settings.kind !== "string") neu.settings.kind = basis.settings.kind;
+  return neu;
+}
+
+function exportieren(){
+  try{
+    zustand.savedAt = new Date().toISOString();
+    const text = JSON.stringify(zustand, null, 2);
+    const blob = new Blob([text], { type:"application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "urlaubsplaner-backup-" + iso(new Date()) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    speichern();
+  }catch(err){
+    alert("Das Backup konnte nicht erzeugt werden: " + err.message);
+  }
+}
+
+function importieren(datei){
+  const leser = new FileReader();
+  leser.onload = () => {
+    let obj;
+    try{
+      obj = JSON.parse(String(leser.result));
+    }catch(err){
+      alert("Die Datei ist keine gültige JSON-Datei.");
+      return;
+    }
+    const geprueft = uebernehmen(obj);
+    if(!geprueft){
+      alert("Die Datei ist keine Urlaubsplaner-Sicherung.");
+      return;
+    }
+    if(!confirm("Backup laden? Der aktuelle Stand wird vollständig ersetzt.")) return;
+    merken();
+    zustand = geprueft;
+    tagIndexBauen();
+    allesZeichnen();
+    speichern();
+  };
+  leser.onerror = () => alert("Die Datei konnte nicht gelesen werden.");
+  leser.readAsText(datei);
+}
+
+/* ------------------------------------------------------------
+   Oberfläche
+   ------------------------------------------------------------ */
+const elRaster   = document.getElementById("raster");
+const elPinsel   = document.getElementById("pinselListe");
+const elBilanz   = document.getElementById("bilanzPersonen");
+const elLegende  = document.getElementById("legendeListe");
+const elHinweise = document.getElementById("hinweisListe");
+const elNotizBox = document.getElementById("notizBox");
+const zellen     = {};   // ISO-Datum -> Element der aktiven Ansicht
+
+function warnungAnzeigen(){
+  document.getElementById("speicherWarnung").classList.toggle("an", !speicherVerfuegbar);
+}
+function zeitAnzeigen(){
+  const el = document.getElementById("zeitGespeichert");
+  if(!speicherVerfuegbar){ el.textContent = "nicht möglich"; return; }
+  if(!zustand.savedAt){ el.textContent = "–"; return; }
+  const d = new Date(zustand.savedAt);
+  el.textContent = String(d.getHours()).padStart(2,"0") + ":" +
+                   String(d.getMinutes()).padStart(2,"0") + " Uhr";
+}
+
+function pinselZeichnen(){
+  elPinsel.innerHTML = "";
+  const knopf = r => {
+    const l = document.createElement("label");
+    l.className = "pinsel";
+    l.innerHTML =
+      '<input type="radio" name="pinsel" value="' + r.id + '">' +
+      '<span class="punkt" style="background:' + pastell(r.farbe, 0.62) + '"></span>' +
+      '<span></span>';
+    l.querySelector("span:last-child").textContent = r.name;
+    elPinsel.appendChild(l);
+  };
+  zustand.personen.forEach(knopf);
+  // Betreuungsquellen malen sich wie Personen, verbrauchen aber keinen Urlaub.
+  if(zustand.betreuung.length){
+    const beschriftung = document.createElement("span");
+    beschriftung.className = "label";
+    beschriftung.style.marginLeft = "8px";
+    beschriftung.textContent = "Betreuung:";
+    elPinsel.appendChild(beschriftung);
+    zustand.betreuung.forEach(knopf);
+  }
+  // Schulfreie Tage lassen sich genauso malen wie Urlaub — zunächst ohne
+  // Bezeichnung, benannt wird später in der Seitenleiste.
+  const sf = document.createElement("span");
+  sf.className = "label";
+  sf.style.marginLeft = "8px";
+  sf.textContent = "Kalender:";
+  elPinsel.appendChild(sf);
+  const f = document.createElement("label");
+  f.className = "pinsel ferien";
+  f.title = "Schulfreie Tage malen — ohne Bezeichnung, benennbar in der Seitenleiste. " +
+            "Noch einmal darüberfahren nimmt sie wieder weg.";
+  f.innerHTML =
+    '<input type="radio" name="pinsel" value="ferien">' +
+    '<span class="punkt"></span><span>Schulfrei</span>';
+  elPinsel.appendChild(f);
+
+  // Termine gehören einer Person — gemalt wird für die zuletzt gewählte.
+  if(!zustand.personen.some(p => p.id === terminPerson) && zustand.personen[0]){
+    terminPerson = zustand.personen[0].id;
+  }
+  const tp = ressourceFinden(terminPerson);
+  const tl = document.createElement("label");
+  tl.className = "pinsel termin";
+  tl.title = "Fortbildung, Kongress, Dienstreise für " + (tp ? tp.name : "") +
+             " — an diesen Tagen ist kein Urlaub möglich. Erst eine Person wählen, " +
+             "dann diesen Pinsel: der Termin gehört dann ihr.";
+  tl.innerHTML =
+    '<input type="radio" name="pinsel" value="termin">' +
+    '<span class="punkt"></span><span></span>';
+  if(tp) farbeSetzen(tl.querySelector(".punkt"), tp.farbe);
+  tl.querySelector("span:last-child").textContent = "Termin" + (tp ? ": " + tp.name : "");
+  elPinsel.appendChild(tl);
+
+  const r = document.createElement("label");
+  r.className = "pinsel radierer";
+  r.innerHTML =
+    '<input type="radio" name="pinsel" value="radieren">' +
+    '<span class="punkt"></span><span>Radieren</span>';
+  elPinsel.appendChild(r);
+
+  elPinsel.querySelectorAll("input").forEach(i => {
+    i.checked = (i.value === pinsel);
+    i.addEventListener("change", () => {
+      pinsel = i.value;
+      // Eine Person zu wählen legt zugleich fest, wem neue Termine gehören.
+      if(zustand.personen.some(p => p.id === i.value)){
+        terminPerson = i.value;
+        pinselZeichnen();
+      }
+    });
+  });
+  if(!elPinsel.querySelector("input:checked")){
+    const erste = elPinsel.querySelector("input");
+    if(erste){ erste.checked = true; pinsel = erste.value; }
+  }
+}
+
+function rasterBauen(){
+  const jahr = zustand.settings.aktivesJahr;
+  // Das Balkenfeld wächst mit der Zahl der Ressourcen.
+  elRaster.style.setProperty("--spuren", ressourcen().length);
+  elRaster.innerHTML = "";
+  for(const k in zellen) delete zellen[k];
+
+  const ecke = document.createElement("div");
+  ecke.className = "kopfzelle";
+  elRaster.appendChild(ecke);
+  MONATE.forEach(m => {
+    const k = document.createElement("div");
+    k.className = "kopfzelle";
+    k.textContent = m;
+    elRaster.appendChild(k);
+  });
+
+  const heute = iso(new Date());
+  for(let tag = 1; tag <= 31; tag++){
+    const nr = document.createElement("div");
+    nr.className = "tagnummer";
+    nr.textContent = tag;
+    elRaster.appendChild(nr);
+
+    for(let monat = 0; monat < 12; monat++){
+      const d = new Date(jahr, monat, tag);
+      if(d.getMonth() !== monat){          // z. B. 31. Februar
+        const leer = document.createElement("div");
+        leer.className = "leer";
+        elRaster.appendChild(leer);
+        continue;
+      }
+      const datum = iso(d);
+      const z = document.createElement("div");
+      z.className = "tag";
+      z.dataset.datum = datum;
+      z.innerHTML = '<span class="wt"></span><span class="balken"></span>' +
+                    '<span class="notiz"></span><span class="terminspur"></span>';
+      z.querySelector(".wt").textContent = WOCHENTAGE[d.getDay()];
+      if(datum === heute) z.classList.add("heute");
+      elRaster.appendChild(z);
+      zellen[datum] = z;
+    }
+  }
+}
+
+/* Tooltip einer Tageszelle. */
+function titelText(datum){
+  const t = tagIndex[datum];
+  const teile = [lang(datum)];
+  if(t.feiertag)  teile.push("Feiertag: " + t.feiertag);
+  if(t.schulfrei) teile.push(t.schulfrei);
+  if(t.betreuungspflichtig){
+    teile.push(istLuecke(datum) ? "LÜCKE — betreuungspflichtig, niemand eingetragen"
+                                : "betreuungspflichtig");
+  }
+  freiAm(datum).forEach(id => {
+    const r = ressourceFinden(id);
+    if(r) teile.push(r.name);
+  });
+  termineAm(datum).forEach(e => {
+    const r = ressourceFinden(e.person);
+    teile.push("Termin" + (r ? " " + r.name : "") + ": " + (e.name || "ohne Bezeichnung") +
+               (freiAm(datum).indexOf(e.person) !== -1 ? " — hier ist kein Urlaub möglich!" : ""));
+  });
+  const n = notizVon(datum);
+  if(n) teile.push("Notiz: " + n);
+  teile.push("Rechtsklick: Notiz");
+  return teile.join(" · ");
+}
+
+/* Gleiche Notiz am Vor- oder Folgetag derselben Rasterspalte? */
+function notizNachbar(datum, versatz){
+  const eigen = notizVon(datum);
+  if(!eigen) return false;
+  const d = ausIso(datum);
+  const n = plusTage(d, versatz);
+  if(n.getMonth() !== d.getMonth()) return false;
+  return notizVon(iso(n)) === eigen;
+}
+
+/* Balken und Notizbänder verschmelzen über die Zellgrenze hinweg — beim Malen
+   müssen die Nachbartage deshalb mitgezeichnet werden. */
+function zelleNachbarnZeichnen(datum){
+  const d = ausIso(datum);
+  [-1,0,1].forEach(v => zelleZeichnen(iso(plusTage(d,v))));
+}
+function zellenNeuZeichnen(){
+  for(const datum in zellen) zelleZeichnen(datum);
+}
+
+function zelleZeichnen(datum){
+  const z = zellen[datum];
+  const t = tagIndex[datum];
+  if(!z || !t) return;
+
+  z.classList.toggle("we",        !t.werktag);
+  z.classList.toggle("feiertag",  t.werktag && !!t.feiertag);
+  z.classList.toggle("schulfrei", t.werktag && !t.feiertag && !!t.schulfrei);
+  z.classList.toggle("luecke",    zustand.settings.luckenanalyseAktiv && istLuecke(datum));
+
+  const frei = freiAm(datum);
+  const balken = z.querySelector(".balken");
+  balken.innerHTML = "";
+
+  // Nachbarschaft im Raster: nur derselbe Monat ist dieselbe Spalte, ein
+  // Monatswechsel unterbricht den Block auch bei fortlaufendem Datum.
+  const d = ausIso(datum);
+  const nachbar = (versatz, id) => {
+    const n = plusTage(d, versatz);
+    if(n.getMonth() !== d.getMonth()) return false;
+    return freiAm(iso(n)).indexOf(id) !== -1;
+  };
+
+  // Feste Spur je Ressource: die waagerechte Position kodiert die Ressource
+  // zusätzlich zur Farbe und bleibt gleich, egal wer sonst eingetragen ist.
+  ressourcen().forEach((r, nr) => {
+    if(frei.indexOf(r.id) === -1) return;
+    const oben  = nachbar(-1, r.id);
+    const unten = nachbar( 1, r.id);
+    const i = document.createElement("i");
+    farbeSetzen(i, r.farbe);
+    i.style.left = "calc(3px + " + nr + " * var(--spur))";
+    // Innerhalb eines Blocks überlappen, an den Enden einrücken und runden.
+    i.style.top    = oben  ? "-1px" : "2px";
+    i.style.bottom = unten ? "-1px" : "2px";
+    i.style.borderTopLeftRadius     = oben  ? "0" : "3px";
+    i.style.borderTopRightRadius    = oben  ? "0" : "3px";
+    i.style.borderBottomLeftRadius  = unten ? "0" : "3px";
+    i.style.borderBottomRightRadius = unten ? "0" : "3px";
+    balken.appendChild(i);
+  });
+
+  // Besondere Termine: schraffierter Streifen am rechten Rand, der wie die
+  // Balken über die Zellgrenze hinweg zusammenwächst. Haben mehrere Personen
+  // am selben Tag einen Termin, trägt der Streifen die Farbe der ersten;
+  // Tooltip und Seitenleiste nennen alle.
+  const termine = termineAm(datum);
+  const tspur   = z.querySelector(".terminspur");
+  tspur.innerHTML = "";
+  if(termine.length){
+    const person = ressourceFinden(termine[0].person);
+    const nachbarTermin = versatz => {
+      const n = plusTage(d, versatz);
+      if(n.getMonth() !== d.getMonth()) return false;
+      return !!terminVon(iso(n), termine[0].person);
+    };
+    const davor = nachbarTermin(-1), danach = nachbarTermin(1);
+    const i = document.createElement("i");
+    if(person) farbeSetzen(i, person.farbe);
+    i.classList.toggle("konflikt", terminKonflikt(datum));
+    i.style.top    = davor  ? "-1px" : "2px";
+    i.style.bottom = danach ? "-1px" : "2px";
+    i.style.borderTopLeftRadius     = davor  ? "0" : "2px";
+    i.style.borderTopRightRadius    = davor  ? "0" : "2px";
+    i.style.borderBottomLeftRadius  = danach ? "0" : "2px";
+    i.style.borderBottomRightRadius = danach ? "0" : "2px";
+    tspur.appendChild(i);
+  }
+
+  // Beschriftung: der Reisename hat Vorrang, sonst steht hier der Terminname.
+  const notiz = notizVon(datum);
+  const text  = z.querySelector(".notiz");
+  text.classList.remove("termintext");
+  if(notiz){
+    const davor  = notizNachbar(datum, -1);
+    // Beschriftet wird nur der Blockanfang — dafür über die volle Blockhöhe.
+    if(davor){
+      text.textContent = "";
+      text.style.height = "";
+      text.classList.remove("quer");
+    }else{
+      let hoch = 1;
+      while(notizNachbar(iso(plusTage(d, hoch-1)), 1)) hoch++;
+      text.textContent = notiz;
+      text.classList.toggle("quer", hoch === 1);
+      text.style.height = hoch === 1 ? "" : "calc(var(--zeile) * " + hoch + " - 4px)";
+    }
+    // Der Wochentag weicht im ganzen Block, sonst läge er unter der Schrift.
+    z.classList.add("mit-notiz");
+  }else if(termine.length && termine[0].name){
+    // Terminname: gleiche Mechanik wie der Reisename, nur in eigener Farbe.
+    const eigen = termine[0];
+    const gleich = versatz => {
+      const n = plusTage(d, versatz);
+      if(n.getMonth() !== d.getMonth()) return false;
+      const e = terminVon(iso(n), eigen.person);
+      return !!e && e.name === eigen.name;
+    };
+    if(gleich(-1)){
+      text.textContent = "";
+      text.style.height = "";
+      text.classList.remove("quer");
+    }else{
+      let hoch = 1;
+      while(gleich(hoch)) hoch++;
+      text.textContent = eigen.name;
+      text.classList.add("termintext");
+      text.classList.toggle("quer", hoch === 1);
+      text.style.height = hoch === 1 ? "" : "calc(var(--zeile) * " + hoch + " - 4px)";
+    }
+    z.classList.add("mit-notiz");
+  }else{
+    text.textContent = "";
+    text.style.height = "";
+    text.classList.remove("quer");
+    z.classList.remove("mit-notiz");
+  }
+  z.title = titelText(datum);
+}
+
+function bilanzZeichnen(){
+  const jahr = String(zustand.settings.aktivesJahr);
+  elBilanz.innerHTML = "";
+  let anspruchGesamt = 0;
+
+  zustand.personen.forEach(p => {
+    const verbraucht = urlaubsverbrauch(p.id);
+    const anspruch = anspruchVon(p);
+    anspruchGesamt += anspruch;
+
+    const zeile = document.createElement("div");
+    zeile.className = "person";
+    zeile.innerHTML =
+      '<span class="punkt"></span>' +
+      '<span class="name"></span>' +
+      '<span class="zahl"><b></b> / </span>' +
+      '<input type="number" min="0" max="366" step="1">';
+    farbeSetzen(zeile.querySelector(".punkt"), p.farbe);
+    zeile.querySelector(".name").textContent = p.name;
+    zeile.querySelector(".zahl b").textContent = verbraucht;
+    const feld = zeile.querySelector("input");
+    feld.value = anspruch;
+    feld.title = "Urlaubsanspruch " + jahr + " für " + p.name;
+    feld.addEventListener("change", () => {
+      const v = Math.max(0, Math.min(366, Math.round(Number(feld.value))));
+      if(!Number.isFinite(v)){ feld.value = anspruch; return; }
+      merken();
+      if(!p.anspruch) p.anspruch = {};
+      p.anspruch[jahr] = v;
+      bilanzZeichnen();
+      speichernGeplant();
+    });
+    elBilanz.appendChild(zeile);
+
+    const rest = document.createElement("div");
+    rest.className = "rest";
+    const offen = anspruch - verbraucht;
+    if(offen < 0){
+      rest.classList.add("ueber");
+      rest.textContent = "⚠ " + Math.abs(offen) + " Tage über dem Anspruch";
+    }else{
+      rest.textContent = offen + " Tage noch offen";
+    }
+    elBilanz.appendChild(rest);
+  });
+
+  kopfBilanzZeichnen();
+
+  const pflicht  = anzahlBetreuungspflichtig();
+  const offen    = luecken().length;
+  const dopp     = doppelbelegungen().length;
+  const budget   = gemeinsamBudget();
+  document.getElementById("zahlFerienwerktage").textContent = pflicht;
+  document.getElementById("zahlAbgedeckt").textContent      = pflicht - offen;
+  document.getElementById("zahlLuecken").textContent        = offen;
+  document.getElementById("zahlDoppel").textContent         = dopp;
+  document.getElementById("zahlBudget").textContent         = budget;
+  document.getElementById("zahlAnspruchGesamt").textContent = anspruchGesamt;
+  document.getElementById("zeileLuecken").classList.toggle("hat-luecken", offen > 0);
+}
+
+/* Dieselben Zahlen wie in der Seitenleiste, nur schmal — im klebenden Kopf
+   stehen sie auch dann noch da, wenn das Raster weit nach unten gescrollt ist. */
+function kopfBilanzZeichnen(){
+  const el = document.getElementById("kopfBilanz");
+  el.innerHTML = "";
+  zustand.personen.forEach(p => {
+    const verbraucht = urlaubsverbrauch(p.id);
+    const anspruch   = anspruchVon(p);
+    const s = document.createElement("span");
+    s.className = "kb" + (verbraucht > anspruch ? " ueber" : "");
+    s.innerHTML = '<span class="punkt"></span><span class="name"></span>' +
+                  '<span><b></b><span class="von"></span></span>';
+    farbeSetzen(s.querySelector(".punkt"), p.farbe);
+    s.querySelector(".name").textContent = p.name;
+    s.querySelector("b").textContent = verbraucht;
+    s.querySelector(".von").textContent = " / " + anspruch;
+    s.title = p.name + ": " + verbraucht + " von " + anspruch + " Urlaubstagen verplant" +
+              (verbraucht > anspruch ? " — über dem Anspruch" : "");
+    el.appendChild(s);
+  });
+}
+
+/* ------------------------------------------------------------
+   Hinweis-Panel (KONZEPT §6)
+   ------------------------------------------------------------ */
+function hinweiseZeichnen(){
+  const liste = [];
+  const mindest = Number(zustand.settings.mindestVerplant) || 0;
+
+  // 1. Lücken mit betroffenen Kalenderwochen
+  const l = luecken();
+  if(l.length){
+    liste.push(["warn", l.length + " betreuungspflichtige Tage sind ungedeckt — KW " +
+                        kwBereiche(l).join(", ") + "."]);
+  }else if(anzahlBetreuungspflichtig()){
+    liste.push(["ok", "Alle " + anzahlBetreuungspflichtig() +
+                      " betreuungspflichtigen Tage sind abgedeckt."]);
+  }
+
+  // 2. Doppelbelegung gegen das Budget aus §1
+  const dopp = doppelbelegungen().length;
+  const budget = gemeinsamBudget();
+  if(dopp){
+    const ueber = dopp - budget;
+    liste.push([ueber > 0 ? "warn" : "info",
+      dopp + " gemeinsame Urlaubstage — beide frei an einem betreuungspflichtigen Tag. " +
+      "Jeder kostet zwei Urlaubstage und deckt nur einen Betreuungstag ab. Budget: " + budget +
+      (ueber > 0 ? " — " + ueber + " Tage über dem Budget."
+                 : " — noch " + (budget - dopp) + " möglich.")]);
+  }else if(budget === 0){
+    liste.push(["info", "Budget für gemeinsamen Familienurlaub: 0 Tage. Jeder Tag, an dem " +
+                        "beide zugleich frei nehmen, reißt rechnerisch sofort eine Lücke."]);
+  }
+
+  // 3. Anspruch und Mindestplanung je Person
+  zustand.personen.forEach(p => {
+    const v = urlaubsverbrauch(p.id), a = anspruchVon(p);
+    if(v > a){
+      liste.push(["warn", p.name + ": " + (v-a) + " Tage über dem Anspruch (" + v + " von " + a + ")."]);
+    }else if(mindest && v < mindest){
+      liste.push(["warn", p.name + ": erst " + v + " von mindestens " + mindest +
+                          " Tagen verplant, " + (a-v) + " noch offen."]);
+    }
+  });
+
+  // 4. Urlaub an Tagen mit Fremdbetreuung
+  const v = verschwendet();
+  if(v.length){
+    liste.push(["warn", v.length + " Urlaubstage liegen auf Tagen, an denen " +
+                        zustand.settings.kind + " ohnehin fremdbetreut ist (" +
+                        v.slice(0,3).map(kurz).join(" ") + (v.length > 3 ? " …" : "") +
+                        ") — dort ist kein Urlaub nötig."]);
+  }
+
+  // 5. Urlaub auf einem gesperrten Termin
+  const konflikte = terminKonflikte();
+  if(konflikte.length){
+    const proPerson = {};
+    konflikte.forEach(k => {
+      const r = ressourceFinden(k.termin.person);
+      const schluessel = (r ? r.name : "?") + "|" + (k.termin.name || "ohne Bezeichnung");
+      (proPerson[schluessel] = proPerson[schluessel] || []).push(k.datum);
+    });
+    Object.keys(proPerson).forEach(schluessel => {
+      const [name, bezeichnung] = schluessel.split("|");
+      const tage = proPerson[schluessel];
+      liste.push(["warn", name + ": " + tage.length +
+        (tage.length === 1 ? " Urlaubstag liegt" : " Urlaubstage liegen") +
+        " auf „" + bezeichnung + "“ (" + tage.slice(0,3).map(kurz).join(" ") +
+        (tage.length > 3 ? " …" : "") + ") — dort ist kein Urlaub möglich."]);
+    });
+  }
+
+  // 6. Brückentage, die noch niemand genommen hat
+  brueckentage().filter(b => !abgedeckt(b.datum)).slice(0,3).forEach(b => {
+    liste.push(["info", lang(b.datum) + " ist ein Brückentag: 1 Urlaubstag → " +
+                        b.kette + " freie Tage."]);
+  });
+
+  const zeichen = { warn:"⚠", info:"ⓘ", ok:"✓" };
+  elHinweise.innerHTML = "";
+  if(!liste.length) liste.push(["info", "Keine Hinweise."]);
+  liste.forEach(([art, text]) => {
+    const li = document.createElement("li");
+    li.className = art;
+    li.innerHTML = '<span class="zeichen"></span><span></span>';
+    li.querySelector(".zeichen").textContent = zeichen[art];
+    li.querySelector("span:last-child").textContent = text;
+    elHinweise.appendChild(li);
+  });
+}
+
+/* ------------------------------------------------------------
+   Zusätzliche schulfreie Tage (bewegliche Ferientage, Pädagogischer Tag …)
+   ------------------------------------------------------------ */
+/* Selbst gemalte Tage werden zu Läufen gebündelt und gemeinsam benannt:
+   wer zwei Wochen Ferien malt, will einmal "Sommerferien" tippen und nicht
+   zehnmal. Fest hinterlegte Termine stehen unverändert einzeln da. */
+function schulfreiZeichnen(){
+  const jahr = zustand.settings.aktivesJahr;
+  const j = jahrSicherstellen(jahr);
+  const ul = document.getElementById("schulfreiListe");
+  ul.innerHTML = "";
+
+  const zeilen = j.schulfrei.filter(sf => sf.quelle !== "manuell")
+    .map(sf => ({ von:sf.datum, bis:sf.datum, fest:true, eintraege:[sf] }));
+
+  const manuell = j.schulfrei.filter(sf => sf.quelle === "manuell");
+  laeufe(manuell.map(sf => sf.datum)).forEach(lauf => {
+    zeilen.push({
+      von: lauf.von, bis: lauf.bis, fest:false,
+      eintraege: manuell.filter(sf => lauf.tage.indexOf(sf.datum) !== -1)
+    });
+  });
+  zeilen.sort((a,b) => a.von < b.von ? -1 : 1);
+
+  zeilen.forEach(zeile => {
+    const li = document.createElement("li");
+    const datum = document.createElement("span");
+    datum.className = "sf-datum";
+    datum.textContent = spanne(zeile.von, zeile.bis);
+    li.appendChild(datum);
+
+    if(zeile.fest){
+      const name = document.createElement("span");
+      name.className = "sf-name";
+      name.textContent = zeile.eintraege[0].name;
+      li.appendChild(name);
+      const fest = document.createElement("span");
+      fest.className = "sf-quelle";
+      fest.textContent = "fest";
+      li.appendChild(fest);
+    }else{
+      const feld = document.createElement("input");
+      feld.type = "text";
+      feld.className = "benennen";
+      feld.maxLength = 40;
+      feld.value = (zeile.eintraege.find(sf => sf.name) || {}).name || "";
+      feld.placeholder = zeile.eintraege.length > 1
+        ? "Bezeichnung für " + zeile.eintraege.length + " Tage" : "Bezeichnung";
+      feld.title = "Bezeichnung für " + spanne(zeile.von, zeile.bis) +
+                   " — lässt sich jederzeit nachtragen";
+      feld.addEventListener("change", () => {
+        merken();
+        const text = feld.value.trim();
+        zeile.eintraege.forEach(sf => sf.name = text);
+        tagIndexBauen();
+        zellenNeuZeichnen();
+        schulfreiZeichnen();
+        speichernGeplant();
+      });
+      li.appendChild(feld);
+
+      const weg = document.createElement("button");
+      weg.className = "sf-weg";
+      weg.type = "button";
+      weg.textContent = "×";
+      weg.title = "Diese Tage wieder entfernen";
+      weg.addEventListener("click", () => {
+        merken();
+        j.schulfrei = j.schulfrei.filter(sf => zeile.eintraege.indexOf(sf) === -1);
+        tagIndexBauen();
+        zellenNeuZeichnen();
+        bilanzZeichnen();
+        hinweiseZeichnen();
+        schulfreiZeichnen();
+        speichernGeplant();
+      });
+      li.appendChild(weg);
+    }
+    ul.appendChild(li);
+  });
+
+  const feld = document.getElementById("schulfreiDatum");
+  feld.min = jahr + "-01-01";
+  feld.max = jahr + "-12-31";
+}
+
+/* Namen von Personen und Betreuungsquellen, Kind und Ort. Alles frei
+   änderbar, damit im Quelltext keine echten Namen stehen müssen. */
+function haushaltZeichnen(){
+  document.getElementById("feldKind").value = zustand.settings.kind === "das Kind" ? "" : zustand.settings.kind;
+  document.getElementById("feldOrt").value  = zustand.settings.ort || "";
+
+  const ul = document.getElementById("namenListe");
+  ul.innerHTML = "";
+  ressourcen().forEach(r => {
+    const li = document.createElement("li");
+    const punkt = document.createElement("span");
+    punkt.className = "punkte";
+    const i = document.createElement("i");
+    farbeSetzen(i, r.farbe);
+    punkt.appendChild(i);
+    li.appendChild(punkt);
+
+    const feld = document.createElement("input");
+    feld.type = "text";
+    feld.className = "benennen";
+    feld.maxLength = 30;
+    feld.value = r.name;
+    feld.title = zustand.personen.indexOf(r) === -1 ? "Betreuungsquelle" : "Person mit Urlaubsanspruch";
+    feld.addEventListener("change", () => {
+      const neu = feld.value.trim();
+      if(!neu){ feld.value = r.name; return; }
+      merken();
+      r.name = neu;
+      allesZeichnen();
+      speichernGeplant();
+    });
+    li.appendChild(feld);
+    ul.appendChild(li);
+  });
+}
+
+/* Besondere Termine: je Person zu Läufen gebündelt, mit Namensfeld —
+   dieselbe Mechanik wie bei den selbst gemalten Ferientagen. */
+function termineZeichnen(){
+  const ul = document.getElementById("terminListe");
+  const liste = terminLaeufe();
+  ul.innerHTML = "";
+
+  liste.forEach(lauf => {
+    const li = document.createElement("li");
+    const punkt = document.createElement("span");
+    punkt.className = "punkte";
+    const pi = document.createElement("i");
+    farbeSetzen(pi, lauf.person.farbe);
+    pi.title = lauf.person.name;
+    punkt.appendChild(pi);
+    li.appendChild(punkt);
+
+    const datum = document.createElement("span");
+    datum.className = "sf-datum";
+    datum.textContent = spanne(lauf.von, lauf.bis);
+    li.appendChild(datum);
+
+    const feld = document.createElement("input");
+    feld.type = "text";
+    feld.className = "benennen";
+    feld.maxLength = 40;
+    feld.value = (lauf.eintraege.find(e => e.name) || {}).name || "";
+    feld.placeholder = "Bezeichnung";
+    feld.title = lauf.person.name + ", " + spanne(lauf.von, lauf.bis) +
+                 " (" + lauf.eintraege.length + " Tage)";
+    feld.addEventListener("change", () => {
+      merken();
+      const text = feld.value.trim();
+      lauf.eintraege.forEach(e => e.name = text);
+      tagIndexBauen();
+      zellenNeuZeichnen();
+      termineZeichnen();
+      speichernGeplant();
+    });
+    li.appendChild(feld);
+
+    const weg = document.createElement("button");
+    weg.className = "sf-weg";
+    weg.type = "button";
+    weg.textContent = "×";
+    weg.title = "Diesen Termin entfernen";
+    weg.addEventListener("click", () => {
+      merken();
+      const j = jahrSicherstellen(zustand.settings.aktivesJahr);
+      j.termine = j.termine.filter(e => lauf.eintraege.indexOf(e) === -1);
+      tagIndexBauen();
+      zellenNeuZeichnen();
+      hinweiseZeichnen();
+      termineZeichnen();
+      speichernGeplant();
+    });
+    li.appendChild(weg);
+    ul.appendChild(li);
+  });
+
+  const wahl = document.getElementById("terminPersonWahl");
+  const vorher = wahl.value;
+  wahl.innerHTML = "";
+  zustand.personen.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = p.name;
+    wahl.appendChild(o);
+  });
+  wahl.value = zustand.personen.some(p => p.id === vorher) ? vorher : terminPerson;
+
+  const jahr = zustand.settings.aktivesJahr;
+  ["terminVon","terminBis"].forEach(id => {
+    const feld = document.getElementById(id);
+    feld.min = jahr + "-01-01";
+    feld.max = jahr + "-12-31";
+  });
+}
+
+function terminHinzufuegen(){
+  const jahr = zustand.settings.aktivesJahr;
+  const von  = document.getElementById("terminVon").value;
+  const bis  = document.getElementById("terminBis").value || von;
+  const name = document.getElementById("terminName").value.trim();
+  const person = document.getElementById("terminPersonWahl").value;
+  if(!von || !tagIndex[von] || !tagIndex[bis]){
+    alert("Bitte einen Zeitraum im Jahr " + jahr + " angeben.");
+    return;
+  }
+  if(bis < von){
+    alert("Das Ende liegt vor dem Anfang.");
+    return;
+  }
+  merken();
+  const j = jahrSicherstellen(jahr);
+  for(let d = ausIso(von); iso(d) <= bis; d = plusTage(d,1)){
+    const datum = iso(d);
+    if(j.termine.some(e => e.datum === datum && e.person === person)) continue;
+    j.termine.push({ name:name, datum:datum, person:person, quelle:"manuell" });
+  }
+  document.getElementById("terminName").value = "";
+  document.getElementById("terminVon").value = "";
+  document.getElementById("terminBis").value = "";
+  tagIndexBauen();
+  zellenNeuZeichnen();
+  hinweiseZeichnen();
+  termineZeichnen();
+  speichernGeplant();
+}
+
+/* Reisen: jeder zusammenhängende Urlaubsblock bekommt hier seinen Namen.
+   Er landet als Notiz auf allen Tagen des Blocks und steht damit im Raster
+   und im Ausdruck. */
+function reisenZeichnen(){
+  const ul = document.getElementById("reiseListe");
+  const hinweis = document.getElementById("reiseHinweis");
+  const liste = reiseLaeufe();
+  ul.innerHTML = "";
+
+  liste.forEach(lauf => {
+    const li = document.createElement("li");
+    const datum = document.createElement("span");
+    datum.className = "sf-datum";
+    datum.textContent = spanne(lauf.von, lauf.bis);
+    li.appendChild(datum);
+
+    // Wer in diesem Block Urlaub hat — als Punkte in den Ressourcenfarben.
+    const punkte = document.createElement("span");
+    punkte.className = "punkte";
+    zustand.personen.forEach(person => {
+      if(!lauf.tage.some(d => freiAm(d).indexOf(person.id) !== -1)) return;
+      const i = document.createElement("i");
+      farbeSetzen(i, person.farbe);
+      i.title = person.name;
+      punkte.appendChild(i);
+    });
+    li.appendChild(punkte);
+
+    const feld = document.createElement("input");
+    feld.type = "text";
+    feld.className = "benennen";
+    feld.maxLength = 60;
+    feld.value = reiseName(lauf);
+    feld.placeholder = "Reise benennen";
+    feld.title = "Bezeichnung für " + spanne(lauf.von, lauf.bis) + " (" + lauf.tage.length + " Tage)";
+    feld.addEventListener("change", () => {
+      merken();
+      reiseBenennen(lauf, feld.value.trim());
+    });
+    li.appendChild(feld);
+    ul.appendChild(li);
+  });
+
+  hinweis.textContent = liste.length
+    ? "Der Name steht anschließend im Raster und im Ausdruck. Er lässt sich " +
+      "auch per Rechtsklick auf einen Tag setzen."
+    : "Sobald Urlaub eingetragen ist, stehen die Blöcke hier und lassen sich benennen.";
+}
+
+function schulfreiHinzufuegen(){
+  const jahr = zustand.settings.aktivesJahr;
+  const feld = document.getElementById("schulfreiDatum");
+  const nameFeld = document.getElementById("schulfreiName");
+  const datum = feld.value;
+  if(!datum || !tagIndex[datum]){
+    alert("Bitte ein Datum im Jahr " + jahr + " wählen.");
+    return;
+  }
+  const j = zustand.jahre[String(jahr)];
+  if(j.schulfrei.some(s => s.datum === datum)){
+    alert("Für den " + kurz(datum) + " ist bereits ein schulfreier Tag erfasst.");
+    return;
+  }
+  merken();
+  j.schulfrei.push({
+    name: nameFeld.value.trim() || "Schulfrei",
+    datum: datum,
+    quelle: "manuell"
+  });
+  feld.value = "";
+  nameFeld.value = "";
+  tagIndexBauen();
+  zellenNeuZeichnen();
+  bilanzZeichnen();
+  hinweiseZeichnen();
+  schulfreiZeichnen();
+  speichernGeplant();
+}
+
+/* ============================================================
+   Phase 3 — Mehrjährigkeit: Jahreswechsel, Feriendaten nachladen,
+   manuelle Erfassung als Rückfallebene (KONZEPT §8 Phase 3).
+   ============================================================ */
+const API_FERIEN       = "https://openholidaysapi.org/SchoolHolidays";
+const CACHE_SCHLUESSEL = "urlaubsplaner.ferien-cache.v1";
+
+let ferienFormOffen = false;
+let ferienMeldung   = null;    // { art, text } — Ergebnis des letzten Abrufs
+let ferienLaedt     = false;
+
+/* Der Cache ist bewusst vom Plan getrennt: er überlebt auch das Laden eines
+   fremden Backups und erspart bei jedem Jahreswechsel einen erneuten Abruf. */
+function cacheLesen(jahr){
+  try{
+    const roh = window.localStorage.getItem(CACHE_SCHLUESSEL);
+    if(!roh) return null;
+    const alles = JSON.parse(roh);
+    const e = alles && alles["DE-BW:" + jahr];
+    return (e && Array.isArray(e.bloecke) && e.bloecke.length) ? e : null;
+  }catch(err){ return null; }
+}
+function cacheSchreiben(jahr, bloecke){
+  try{
+    const roh = window.localStorage.getItem(CACHE_SCHLUESSEL);
+    const alles = roh ? JSON.parse(roh) : {};
+    alles["DE-BW:" + jahr] = { geholt: new Date().toISOString(), bloecke: bloecke };
+    window.localStorage.setItem(CACHE_SCHLUESSEL, JSON.stringify(alles));
+  }catch(err){ /* ohne Zwischenspeicher funktioniert alles genauso, nur langsamer */ }
+}
+
+/* Antwort der openholidaysapi auf unser Modell abbilden: ein Ferienblock je
+   Kalenderjahr-Abschnitt, am Jahresrand abgeschnitten (§3). */
+function ferienAusApi(daten, jahr){
+  if(!Array.isArray(daten)) return [];
+  const anfang = jahr + "-01-01", ende = jahr + "-12-31";
+  const raus = [];
+  daten.forEach(e => {
+    const von = String(e.startDate || "").slice(0,10);
+    const bis = String(e.endDate || von).slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(von) || !/^\d{4}-\d{2}-\d{2}$/.test(bis)) return;
+    if(bis < anfang || von > ende) return;
+    let name = e.name;
+    if(Array.isArray(name)){
+      const t = name.find(n => n && n.language === "DE") || name[0] || {};
+      name = t.text;
+    }
+    raus.push({
+      name: String(name || "Ferien").trim(),
+      von:  von < anfang ? anfang : von,
+      bis:  bis > ende   ? ende   : bis
+    });
+  });
+  return raus.sort((a,b) => a.von < b.von ? -1 : 1);
+}
+
+/* Der Kern von Phase 3.5: Ein Abruf ersetzt ausschließlich Einträge mit
+   quelle "api". Eingebaute Termine und alles selbst Erfasste — bewegliche
+   Ferientage, Pädagogischer Tag, Fasnet — überleben jeden Nachladevorgang. */
+function ferienUebernehmen(jahr, bloecke){
+  const j = jahrSicherstellen(jahr);
+  const behalten = j.ferien.filter(f => f.quelle !== "api");
+  const neu = bloecke
+    .filter(b => !behalten.some(f => f.von === b.von && f.bis === b.bis))
+    .map(b => ({ name:b.name, von:b.von, bis:b.bis, quelle:"api" }));
+  j.ferien = behalten.concat(neu);
+  return neu.length;
+}
+
+function neuBerechnen(){
+  tagIndexBauen();
+  zellenNeuZeichnen();
+  bilanzZeichnen();
+  hinweiseZeichnen();
+  ferienZeichnen();
+  schulfreiZeichnen();
+  reisenZeichnen();
+  termineZeichnen();
+  speichernGeplant();
+}
+
+/* Holt die Schulferien von openholidaysapi.org. Die gesetzlichen Feiertage
+   bleiben berechnet (§3) — sie sind für Baden-Württemberg exakt und brauchen
+   kein Netz. Scheitert der Abruf (bei file:// wegen CORS wahrscheinlich, R3),
+   ist das kein Fehlerfall, sondern die Einladung zur Handeingabe. */
+async function ferienNachladen(jahr, erzwingen){
+  if(ferienLaedt) return false;
+  jahr = Number(jahr);
+  merken();
+
+  if(!erzwingen){
+    const cache = cacheLesen(jahr);
+    if(cache){
+      ferienUebernehmen(jahr, cache.bloecke);
+      ferienMeldung = { art:"info", text:"Ferien aus dem lokalen Zwischenspeicher übernommen." };
+      neuBerechnen();
+      return true;
+    }
+  }
+
+  ferienLaedt = true;
+  ferienMeldung = { art:"info", text:"Ferientermine werden online abgerufen …" };
+  ferienZeichnen();
+
+  const url = API_FERIEN + "?countryIsoCode=DE&subdivisionCode=DE-BW&languageIsoCode=DE" +
+              "&validFrom=" + (jahr-1) + "-12-01&validTo=" + (jahr+1) + "-01-31";
+  try{
+    const antwort = await fetch(url, { headers:{ accept:"application/json" } });
+    if(!antwort.ok) throw new Error("Server antwortet mit " + antwort.status);
+    const bloecke = ferienAusApi(await antwort.json(), jahr);
+    if(!bloecke.length) throw new Error("keine Ferientermine für " + jahr + " geliefert");
+    cacheSchreiben(jahr, bloecke);
+    const uebernommen = ferienUebernehmen(jahr, bloecke);
+    ferienLaedt = false;
+    ferienMeldung = { art:"info",
+      text: uebernommen + " Ferienblöcke von openholidaysapi.org übernommen." };
+    neuBerechnen();
+    return true;
+  }catch(err){
+    ferienLaedt = false;
+    ferienFormOffen = true;      // statt einer Fehlermeldung die Erfassungsmaske
+    ferienMeldung = { art:"warn",
+      text:"Online nicht erreichbar (" + (err && err.message ? err.message : "unbekannt") +
+           "). Bitte die Ferienzeiten für " + jahr + " hier selbst erfassen." };
+    neuBerechnen();
+    return false;
+  }
+}
+
+const QUELLE_TEXT = { eingebaut:"fest", api:"online", manuell:"eigen" };
+
+function ferienZeichnen(){
+  const jahr = zustand.settings.aktivesJahr;
+  const j = jahrSicherstellen(jahr);
+  const karte = document.getElementById("karteFerien");
+  const ul = document.getElementById("ferienListe");
+
+  document.getElementById("ferienJahr").textContent = jahr;
+  ul.innerHTML = "";
+  j.ferien.slice().sort((a,b) => a.von < b.von ? -1 : 1).forEach(block => {
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="sf-name"></span><span class="sf-datum"></span>' +
+                   '<span class="sf-quelle"></span>';
+    li.querySelector(".sf-name").textContent  = block.name;
+    li.querySelector(".sf-datum").textContent = kurz(block.von) + "–" + kurz(block.bis);
+    li.querySelector(".sf-quelle").textContent = QUELLE_TEXT[block.quelle] || "eigen";
+    if(block.quelle !== "eingebaut"){
+      const weg = document.createElement("button");
+      weg.className = "sf-weg";
+      weg.type = "button";
+      weg.textContent = "×";
+      weg.title = "Ferienblock entfernen";
+      weg.addEventListener("click", () => {
+        merken();
+        j.ferien = j.ferien.filter(f => f !== block);
+        neuBerechnen();
+      });
+      li.appendChild(weg);
+    }
+    ul.appendChild(li);
+  });
+
+  const status = document.getElementById("ferienStatus");
+  if(ferienMeldung){
+    status.textContent = ferienMeldung.text;
+    status.classList.toggle("warn", ferienMeldung.art === "warn");
+  }else if(j.ferien.length){
+    const eigen = j.ferien.filter(f => f.quelle === "manuell").length;
+    status.textContent = j.ferien.length + " Ferienblöcke hinterlegt" +
+      (eigen ? ", davon " + eigen + " selbst erfasst" : "") + ".";
+    status.classList.remove("warn");
+  }else{
+    status.textContent = "Für " + jahr + " liegen noch keine Ferientermine vor.";
+    status.classList.add("warn");
+  }
+
+  const form = document.getElementById("ferienForm");
+  form.hidden = !(ferienFormOffen || !j.ferien.length);
+  karte.classList.toggle("erfassen", !j.ferien.length);
+  document.getElementById("btnFerienApi").classList.toggle("lade", ferienLaedt);
+  ["ferienVon","ferienBis"].forEach(id => {
+    const feld = document.getElementById(id);
+    feld.min = jahr + "-01-01";
+    feld.max = jahr + "-12-31";
+  });
+}
+
+function ferienHinzufuegen(){
+  const jahr = zustand.settings.aktivesJahr;
+  const von = document.getElementById("ferienVon").value;
+  const bis = document.getElementById("ferienBis").value;
+  const name = document.getElementById("ferienName").value.trim();
+  if(!von || !bis || !tagIndex[von] || !tagIndex[bis]){
+    alert("Bitte Anfang und Ende im Jahr " + jahr + " angeben.");
+    return;
+  }
+  if(bis < von){
+    alert("Das Ende liegt vor dem Anfang.");
+    return;
+  }
+  merken();
+  jahrSicherstellen(jahr).ferien.push({
+    name: name || "Ferien", von: von, bis: bis, quelle: "manuell"
+  });
+  document.getElementById("ferienName").value = "";
+  document.getElementById("ferienVon").value = "";
+  document.getElementById("ferienBis").value = "";
+  ferienMeldung = null;
+  neuBerechnen();
+}
+
+/* Auswahl: eingebaute Jahre, alles bereits Geplante und das Folgejahr. */
+function jahreListe(){
+  const menge = {};
+  Object.keys(FERIEN_BW).forEach(j => menge[Number(j)] = true);
+  Object.keys(zustand.jahre).forEach(j => { if(Number(j)) menge[Number(j)] = true; });
+  const a = zustand.settings.aktivesJahr;
+  menge[a] = true; menge[a+1] = true;
+  return Object.keys(menge).map(Number).sort((x,y) => x-y);
+}
+
+function jahrWahlZeichnen(){
+  const wahl = document.getElementById("jahrWahl");
+  wahl.innerHTML = "";
+  jahreListe().forEach(j => {
+    const o = document.createElement("option");
+    o.value = String(j);
+    o.textContent = j;
+    wahl.appendChild(o);
+  });
+  const andere = document.createElement("option");
+  andere.value = "andere";
+  andere.textContent = "anderes Jahr …";
+  wahl.appendChild(andere);
+  wahl.value = String(zustand.settings.aktivesJahr);
+}
+
+function jahrWechseln(jahr){
+  jahr = Number(jahr);
+  if(!Number.isFinite(jahr) || jahr < 2000 || jahr > 2100){
+    alert("Bitte ein Jahr zwischen 2000 und 2100 angeben.");
+    jahrWahlZeichnen();
+    return;
+  }
+  if(jahr === zustand.settings.aktivesJahr){ jahrWahlZeichnen(); return; }
+  zustand.settings.aktivesJahr = jahr;
+  ferienMeldung = null;
+  ferienFormOffen = false;
+  jahrSicherstellen(jahr);
+  tagIndexBauen();
+  allesZeichnen();
+  speichernGeplant();
+  // Für ein Jahr ohne hinterlegte Termine einmal selbst online nachsehen.
+  if(!zustand.jahre[String(jahr)].ferien.length) ferienNachladen(jahr, false);
+}
+
+function legendeZeichnen(){
+  const typen = [
+    ["var(--tag-schule)",   "Schultag"],
+    ["var(--tag-we)",       "Wochenende"],
+    ["var(--tag-feiertag)", "Gesetzlicher Feiertag"],
+    ["var(--tag-frei)",     "Schulferien / schulfrei — betreuungspflichtig"]
+  ];
+  elLegende.innerHTML = "";
+  typen.forEach(([farbe, text]) => {
+    const e = document.createElement("span");
+    e.className = "legende-eintrag";
+    e.innerHTML = '<span class="feld" style="background:' + farbe + '"></span><span></span>';
+    e.querySelector("span:last-child").textContent = text;
+    elLegende.appendChild(e);
+  });
+  ressourcen().forEach(r => {
+    const e = document.createElement("span");
+    e.className = "legende-eintrag";
+    e.innerHTML = '<span class="streifen"></span><span></span>';
+    farbeSetzen(e.querySelector(".streifen"), r.farbe);
+    e.querySelector("span:last-child").textContent =
+      r.name + (zustand.betreuung.indexOf(r) === -1 ? " — Urlaub" : " — Betreuung");
+    elLegende.appendChild(e);
+  });
+  const termin = document.createElement("span");
+  termin.className = "legende-eintrag";
+  termin.innerHTML = '<span class="feld probe-termin"></span><span></span>';
+  termin.querySelector("span:last-child").textContent =
+    "Besonderer Termin — kein Urlaub möglich (voll rot: hier liegt trotzdem Urlaub)";
+  elLegende.appendChild(termin);
+
+  const luecke = document.createElement("span");
+  luecke.className = "legende-eintrag";
+  luecke.innerHTML = '<span class="feld probe-luecke"></span><span></span>';
+  luecke.querySelector("span:last-child").textContent = "Lücke — niemand eingetragen";
+  elLegende.appendChild(luecke);
+
+  document.getElementById("legendeHinweis").textContent =
+    "Jede Ressource hat eine feste Spur von links nach rechts (" +
+    ressourcen().map(r => r.name).join(", ") +
+    "); die Position kennzeichnet sie also unabhängig von der Farbe. Aufeinanderfolgende " +
+    "Tage wachsen zu einer durchgehenden senkrechten Linie zusammen. " +
+    "Maus gedrückt halten und ziehen malt mehrere Tage am Stück, auch über Monatsgrenzen " +
+    "hinweg; ein zweiter Zug mit demselben Pinsel nimmt das Gemalte wieder weg. " +
+    "Mit „Schulfrei“ lassen sich fehlende Ferientage direkt ins Raster malen und " +
+    "später in der Seitenleiste benennen. " +
+    "Rechtsklick auf einen Tag öffnet das Notizfeld. Lücken sind rot umrandet " +
+    "und schraffiert — beides zusammen, damit sie auch in Graustufen und bei " +
+    "Farbsehschwäche auffallen.";
+}
+
+function kopfZeichnen(){
+  document.getElementById("kopfJahrDruck").textContent = zustand.settings.aktivesJahr;
+  document.getElementById("kopfOrt").textContent =
+    (zustand.settings.ort ? zustand.settings.ort + " · " : "") +
+    "Baden-Württemberg · Betreuung für " + zustand.settings.kind;
+  // Kopfzeile des Ausdrucks: Jahr und Erstellungsdatum (§7).
+  document.getElementById("kopfDruckDatum").textContent = "Stand " + lang(iso(new Date()));
+  document.title = "Urlaubsplaner " + zustand.settings.aktivesJahr;
+}
+
+function allesZeichnen(){
+  kopfZeichnen();
+  jahrWahlZeichnen();
+  pinselZeichnen();
+  rasterBauen();
+  zellenNeuZeichnen();
+  bilanzZeichnen();
+  hinweiseZeichnen();
+  ferienZeichnen();
+  schulfreiZeichnen();
+  reisenZeichnen();
+  termineZeichnen();
+  haushaltZeichnen();
+  legendeZeichnen();
+  schalterZeichnen();
+  zeitAnzeigen();
+  undoKnopfZeichnen();
+}
+function schalterZeichnen(){
+  document.getElementById("schalterLuecken").checked = !!zustand.settings.luckenanalyseAktiv;
+}
+
+/* ------------------------------------------------------------
+   Notizfeld (Rechtsklick auf einen Tag)
+   ------------------------------------------------------------ */
+let notizDatum = null;
+
+/* Zusammenhängender Block eingetragener Tage um einen Tag herum — die Spanne,
+   auf die sich eine Notiz sinnvoll in einem Rutsch anwenden lässt. */
+function blockTage(datum){
+  if(!abgedeckt(datum)) return [datum];
+  const belegt = Object.keys(eintraege()).filter(d => tagIndex[d] && abgedeckt(d));
+  const lauf = laeufe(belegt, arbeitsfrei).find(l => l.tage.indexOf(datum) !== -1);
+  return lauf ? lauf.tage : [datum];
+}
+
+function notizOeffnen(datum, x, y){
+  if(!tagIndex[datum]) return;
+  notizDatum = datum;
+  document.getElementById("notizTitel").textContent = lang(datum);
+  const feld = document.getElementById("notizText");
+  feld.value = notizVon(datum);
+
+  const block = blockTage(datum);
+  const zeile = document.getElementById("notizBlockZeile");
+  const haken = document.getElementById("notizBlock");
+  haken.checked = false;
+  zeile.hidden = block.length < 2;
+  if(block.length >= 2){
+    document.getElementById("notizBlockText").textContent =
+      "auf den ganzen Block " + kurz(block[0]) + "–" + kurz(block[block.length-1]) +
+      " anwenden (" + block.length + " Tage)";
+  }
+
+  elNotizBox.classList.add("an");
+  // Erst einblenden, dann messen: vorher hat der Kasten keine Maße.
+  const breite = elNotizBox.offsetWidth, hoehe = elNotizBox.offsetHeight;
+  elNotizBox.style.left = Math.max(8, Math.min(x, window.scrollX + document.documentElement.clientWidth - breite - 8)) + "px";
+  elNotizBox.style.top  = Math.max(8, Math.min(y, window.scrollY + document.documentElement.clientHeight - hoehe - 8)) + "px";
+  feld.focus();
+  feld.select();
+}
+function notizSchliessen(){
+  elNotizBox.classList.remove("an");
+  notizDatum = null;
+}
+function notizUebernehmen(text){
+  if(!notizDatum) return;
+  merken();
+  const e = eintraege();
+  const haken = document.getElementById("notizBlock");
+  const ziele = (!document.getElementById("notizBlockZeile").hidden && haken.checked)
+              ? blockTage(notizDatum) : [notizDatum];
+  ziele.forEach(d => {
+    if(text){
+      if(!e[d]) e[d] = { frei:[] };
+      e[d].notiz = text;
+    }else if(e[d]){
+      delete e[d].notiz;
+      if(!e[d].frei || !e[d].frei.length) delete e[d];
+    }
+  });
+  notizSchliessen();
+  zellenNeuZeichnen();
+  bilanzZeichnen();
+  hinweiseZeichnen();
+  speichernGeplant();
+}
+
+/* ============================================================
+   Online-Abgleich über ein privates GitHub-Repo
+   Übernommen aus dem Schwesterprojekt „Tagesdokumentation“: eine
+   AES-GCM-verschlüsselte Datei im Repo, Abgleich über den Datei-SHA,
+   Drei-Wege-Zusammenführung gegen den zuletzt abgeglichenen Stand.
+   Nur so überschreibt nicht das zuletzt gestartete Gerät alles andere —
+   genau das Risiko R5 aus KONZEPT.md.
+   ============================================================ */
+const LS_SYNC    = "urlaubsplaner.sync.v1";   // {repo, token, pw, salt, sha, hash, zuletzt}
+const SYNC_DATEI = "urlaubsplaner_backup.json";
+const PBKDF2_ITER = 310000;
+
+let sync = (() => {
+  try{ return JSON.parse(window.localStorage.getItem(LS_SYNC) || "{}") || {}; }
+  catch(err){ return {}; }
+})();
+/* Bewusst eigener Schlüssel und nicht über speichern(): Token und Passwort
+   gehören weder in den Zustand noch in die Backup-Datei. */
+function syncSichern(){
+  try{ window.localStorage.setItem(LS_SYNC, JSON.stringify(sync)); }catch(err){}
+}
+const syncAktiv = () => !!(sync.repo && sync.token && sync.pw);
+
+const b64 = puffer => {
+  const u = new Uint8Array(puffer);
+  let t = "";
+  for(let i = 0; i < u.length; i += 0x8000) t += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(t);
+};
+const unb64  = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+const utf8b64 = t => b64(new TextEncoder().encode(t));
+
+const schluesselCache = {};
+async function schluessel(pw, salt){
+  const id = pw + "|" + b64(salt);
+  if(schluesselCache[id]) return schluesselCache[id];
+  const basis = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  return schluesselCache[id] = crypto.subtle.deriveKey(
+    { name:"PBKDF2", salt:salt, iterations:PBKDF2_ITER, hash:"SHA-256" },
+    basis, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]);
+}
+function geraet(){
+  const u = navigator.userAgent;
+  return /iPhone|iPad/.test(u) ? "iPhone/iPad" : /Android/.test(u) ? "Android"
+       : /Windows/.test(u) ? "Windows" : /Mac/.test(u) ? "Mac" : "Browser";
+}
+async function verschluesseln(stand){
+  if(!sync.salt) sync.salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+  const iv  = crypto.getRandomValues(new Uint8Array(12));
+  const key = await schluessel(sync.pw, unb64(sync.salt));
+  const ct  = await crypto.subtle.encrypt({ name:"AES-GCM", iv:iv }, key,
+                new TextEncoder().encode(JSON.stringify(stand)));
+  return {
+    meta:{ app:"urlaubsplaner", schemaVersion:SCHEMA_VERSION, erstellt:new Date().toISOString(),
+           geraet:geraet(), jahre:Object.keys(stand.jahre || {}).sort() },
+    enc:{ alg:"AES-GCM-256", kdf:"PBKDF2-SHA256", iter:PBKDF2_ITER,
+          salt:sync.salt, iv:b64(iv), data:b64(ct) }
+  };
+}
+async function entschluesseln(datei){
+  const e = datei && datei.enc;
+  if(!e || e.alg !== "AES-GCM-256") throw new Error("Unbekanntes Dateiformat.");
+  let roh;
+  try{
+    const key = await schluessel(sync.pw, unb64(e.salt));
+    roh = await crypto.subtle.decrypt({ name:"AES-GCM", iv:unb64(e.iv) }, key, unb64(e.data));
+  }catch(err){
+    throw new Error("Entschlüsseln fehlgeschlagen – Passwort auf diesem Gerät anders?");
+  }
+  const stand = uebernehmen(JSON.parse(new TextDecoder().decode(roh)));
+  if(!stand) throw new Error("Die Online-Datei ist keine Urlaubsplaner-Sicherung.");
+  return stand;   // das Gerätekürzel steht in datei.meta und gehört nicht in den Zustand
+}
+
+async function gh(methode, koerper){
+  const ziel = "https://api.github.com/repos/" + sync.repo + "/contents/" + SYNC_DATEI +
+               (methode === "GET" ? "?t=" + Date.now() : "");
+  const antwort = await fetch(ziel, {
+    method: methode, cache:"no-store",
+    headers:{ Authorization:"Bearer " + sync.token, Accept:"application/vnd.github+json",
+              "X-GitHub-Api-Version":"2022-11-28" },
+    body: koerper && JSON.stringify(koerper)
+  });
+  if(methode === "GET" && antwort.status === 404){
+    // Entweder gibt es die Datei noch nicht, oder Repo/Token stimmen nicht.
+    const r = await fetch("https://api.github.com/repos/" + sync.repo,
+                          { cache:"no-store", headers:{ Authorization:"Bearer " + sync.token } });
+    if(!r.ok) throw new Error(r.status === 401 ? "Token ungültig oder abgelaufen."
+                                               : "Repo nicht gefunden oder Token hat keinen Zugriff.");
+    return null;
+  }
+  if(antwort.status === 401) throw new Error("Token ungültig oder abgelaufen.");
+  if(antwort.status === 403) throw new Error("Token darf nicht schreiben („Contents: Read and write“ fehlt).");
+  if(antwort.status === 409 || antwort.status === 422) return { konflikt:true };
+  if(!antwort.ok) throw new Error("GitHub antwortet mit " + antwort.status + ".");
+  return antwort.json();
+}
+
+/* ---- Zerlegen und Zusammensetzen ----
+   Zusammengeführt wird Eintrag für Eintrag, nicht Datei für Datei. Dafür wird
+   der Zustand in flache Bereiche zerlegt: ein Tag, ein Ferienblock, ein Termin
+   ist je ein Eintrag mit stabilem Schlüssel. Die Feiertage fehlen bewusst —
+   sie werden berechnet und müssen nicht übertragen werden. */
+const BEREICHE = ["stamm","tage","kalender"];
+function zerlegen(z){
+  const raus = { stamm:{}, tage:{}, kalender:{} };
+  raus.stamm.settings  = z.settings;
+  raus.stamm.personen  = z.personen;
+  raus.stamm.betreuung = z.betreuung;
+  Object.keys(z.jahre || {}).forEach(j => {
+    const jd = z.jahre[j] || {};
+    Object.keys(jd.eintraege || {}).forEach(d => { raus.tage[d] = jd.eintraege[d]; });
+    (jd.ferien    || []).forEach(f => { raus.kalender[j + "|ferien|"    + f.von + "|" + f.bis] = f; });
+    (jd.schulfrei || []).forEach(f => { raus.kalender[j + "|schulfrei|" + f.datum] = f; });
+    (jd.termine   || []).forEach(f => { raus.kalender[j + "|termin|"    + f.datum + "|" + f.person] = f; });
+  });
+  return JSON.parse(JSON.stringify(raus));
+}
+function zusammensetzen(flach){
+  const z = standardZustand();
+  z.settings = Object.assign(z.settings, flach.stamm.settings || {});
+  if(Array.isArray(flach.stamm.personen)  && flach.stamm.personen.length)  z.personen  = flach.stamm.personen;
+  if(Array.isArray(flach.stamm.betreuung))                                 z.betreuung = flach.stamm.betreuung;
+  const jahrVon = j => {
+    if(!z.jahre[j]) z.jahre[j] = { ferien:[], feiertage:[], schulfrei:[], termine:[], eintraege:{} };
+    return z.jahre[j];
+  };
+  Object.keys(flach.tage).sort().forEach(d => { jahrVon(d.slice(0,4)).eintraege[d] = flach.tage[d]; });
+  Object.keys(flach.kalender).sort().forEach(k => {
+    const teile = k.split("|"), jd = jahrVon(teile[0]), e = flach.kalender[k];
+    if(teile[1] === "ferien")         jd.ferien.push(e);
+    else if(teile[1] === "schulfrei") jd.schulfrei.push(e);
+    else                              jd.termine.push(e);
+  });
+  return uebernehmen(z);
+}
+
+/* Prüfsumme über den zerlegten Stand: zwei Geräte mit gleichem Inhalt kommen
+   auf denselben Wert, egal in welcher Reihenfolge die Schlüssel entstanden. */
+const kanon = v => v === undefined ? "~"
+  : v === null || typeof v !== "object" ? JSON.stringify(v)
+  : Array.isArray(v) ? "[" + v.map(kanon).join(",") + "]"
+  : "{" + Object.keys(v).sort().filter(k => v[k] !== undefined)
+          .map(k => JSON.stringify(k) + ":" + kanon(v[k])).join(",") + "}";
+function pruefsumme(z){
+  const t = kanon(zerlegen(z));
+  let h = 0x811c9dc5;
+  for(let i = 0; i < t.length; i++){ h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36) + t.length;
+}
+/* Kein eigenes Dirty-Flag wie im Schwesterprojekt: dessen Datenmenge ist zu
+   groß für eine Prüfsumme bei jeder Abfrage, der Urlaubsplan ist es nicht. */
+function lokalGeaendert(){
+  return !sync.hash || pruefsumme(zustand) !== sync.hash;
+}
+/* Ein frisch eingerichtetes Gerät hat nichts zu verlieren: dort wird der
+   Online-Stand ohne Rückfrage übernommen, statt jeden Eintrag zu erfragen. */
+function nichtsEigenes(){
+  return !Object.keys(zustand.jahre).some(j => {
+    const jd = zustand.jahre[j] || {};
+    return Object.keys(jd.eintraege || {}).length > 0 ||
+           (jd.schulfrei || []).some(e => e.quelle === "manuell") ||
+           (jd.ferien    || []).some(e => e.quelle === "manuell") ||
+           (jd.termine   || []).length > 0;
+  });
+}
+
+/* ---- Basis und Sicherheitskopie in IndexedDB ---- */
+let idbVersprechen = null;
+function idb(){
+  if(idbVersprechen) return idbVersprechen;
+  return idbVersprechen = new Promise((ok, fehler) => {
+    const a = indexedDB.open("urlaubsplaner", 1);
+    a.onupgradeneeded = () => a.result.createObjectStore("kv");
+    a.onsuccess = () => ok(a.result);
+    a.onerror   = () => fehler(a.error);
+  });
+}
+async function kvSetzen(k, v){
+  try{
+    const db = await idb();
+    await new Promise((ok, fehler) => {
+      const tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").put(v, k);
+      tx.oncomplete = ok; tx.onerror = () => fehler(tx.error);
+    });
+  }catch(err){ /* privater Modus: dann eben ohne */ }
+}
+async function kvHolen(k){
+  try{
+    const db = await idb();
+    return await new Promise((ok, fehler) => {
+      const tx = db.transaction("kv", "readonly");
+      const a = tx.objectStore("kv").get(k);
+      tx.oncomplete = () => ok(a.result); tx.onerror = () => fehler(tx.error);
+    });
+  }catch(err){ return undefined; }
+}
+async function basisMerken(stand){
+  sync.hash = pruefsumme(stand);
+  syncSichern();
+  await kvSetzen("basis", zerlegen(stand));
+}
+
+/* Drei-Wege-Abgleich je Eintrag: nur hier geändert → hier, nur online geändert
+   → online, auf beiden Seiten geändert → Rückfrage. Ohne Basis (erste
+   Verbindung) ist jeder Unterschied eine Rückfrage wert. */
+function zusammenfuehren(basis, lok, onl){
+  const erg = JSON.parse(JSON.stringify(lok));
+  const konflikte = [];
+  let vonOnline = 0, vonHier = 0;
+  BEREICHE.forEach(b => {
+    const L = lok[b] || {}, R = onl[b] || {}, B = basis ? (basis[b] || {}) : null;
+    const schluessel = {};
+    [L, R, B || {}].forEach(m => Object.keys(m).forEach(k => { schluessel[k] = true; }));
+    Object.keys(schluessel).forEach(k => {
+      const l = kanon(L[k]), o = kanon(R[k]);
+      if(l === o) return;
+      if(B && l === kanon(B[k])){
+        vonOnline++;
+        if(R[k] === undefined) delete erg[b][k]; else erg[b][k] = R[k];
+      }else if(B && o === kanon(B[k])){
+        vonHier++;
+      }else{
+        konflikte.push({ bereich:b, k:k, hier:L[k], online:R[k] });
+      }
+    });
+  });
+  return { erg:erg, konflikte:konflikte, vonOnline:vonOnline, vonHier:vonHier };
+}
+function konfliktText(konflikte){
+  const wer = e => (e && Array.isArray(e.frei) ? e.frei.map(id => {
+    const r = ressourceFinden(id); return r ? r.name : id;
+  }).join(", ") : "") || "nichts";
+  const zeilen = konflikte.slice(0, 8).map(c => {
+    if(c.bereich === "tage")
+      return "• " + kurz(c.k) + "  hier: " + wer(c.hier) + "  |  online: " + wer(c.online);
+    if(c.bereich === "kalender"){
+      const teile = c.k.split("|");
+      const art = { ferien:"Ferien", schulfrei:"Schulfrei", termin:"Termin" }[teile[1]] || teile[1];
+      return "• " + art + " " + kurz(teile[2]) + " (" + teile[0] + ")";
+    }
+    return "• " + { settings:"Einstellungen", personen:"Personen", betreuung:"Betreuungsquellen" }[c.k];
+  });
+  if(konflikte.length > 8) zeilen.push("… und " + (konflikte.length - 8) + " weitere");
+  return zeilen.join("\n");
+}
+
+async function hochladen(){
+  const stand = JSON.parse(JSON.stringify(zustand));
+  stand.savedAt = new Date().toISOString();
+  const datei = await verschluesseln(stand);
+  const r = await gh("PUT", {
+    message: "Urlaubsplan " + datei.meta.erstellt + " (" + datei.meta.geraet + ")",
+    content: utf8b64(JSON.stringify(datei, null, 1)),
+    ...(sync.sha ? { sha:sync.sha } : {})
+  });
+  if(r.konflikt) return false;          // jemand war schneller — noch einmal abgleichen
+  sync.sha = r.content.sha;
+  sync.zuletzt = datei.meta.erstellt;
+  syncSichern();
+  await basisMerken(stand);
+  return true;
+}
+
+/* Vor jeder Übernahme bleibt der Stand dieses Geräts erhalten — im
+   Rückgängig-Stapel und zusätzlich in IndexedDB, damit er auch einen Neustart
+   übersteht. */
+async function vorherSichern(){
+  merken();
+  await kvSetzen("vorher", { zeit:new Date().toISOString(), stand:JSON.parse(JSON.stringify(zustand)) });
+  syncVorherZeichnen();
+}
+async function syncVorherZeichnen(){
+  const knopf = document.getElementById("syncVorher");
+  const v = await kvHolen("vorher");
+  knopf.hidden = !v;
+  if(v) knopf.title = "Stand von vor dem Abgleich am " +
+                      new Date(v.zeit).toLocaleString("de-DE") + " zurückholen";
+}
+
+let syncLaeuft = false, syncFehler = "", syncTimer = null;
+
+function syncStatus(){
+  const b = document.getElementById("syncBtn");
+  if(!b) return;
+  const offen = syncAktiv() && !syncLaeuft && lokalGeaendert();
+  const [st, zeichen, text] =
+      !syncAktiv() ? ["off","☁","Online-Abgleich nicht eingerichtet"]
+    : syncLaeuft   ? ["busy","⟳","Wird abgeglichen …"]
+    : syncFehler   ? ["err","⚠","Online-Abgleich: " + syncFehler]
+    : offen        ? ["wait","◴", navigator.onLine ? "Änderungen noch nicht online"
+                                                   : "Offline — wird später abgeglichen"]
+    :                ["ok","✓","Online abgeglichen" +
+                      (sync.zuletzt ? ": " + new Date(sync.zuletzt).toLocaleString("de-DE") : "")];
+  b.dataset.st = st;
+  b.textContent = zeichen;
+  b.title = text;
+}
+/* Nicht bei jedem Klick hochladen: 20 Sekunden Ruhe, dann von selbst. */
+function syncNachAenderung(){
+  syncStatus();
+  if(!syncAktiv()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => abgleichen(false), 20000);
+}
+function syncMeldung(text, art){
+  const el = document.getElementById("syncMsg");
+  el.textContent = text;
+  el.classList.toggle("warn", art === "warn");
+  el.classList.toggle("ok",   art === "ok");
+}
+
+async function abgleichen(manuell){
+  if(!syncAktiv() || syncLaeuft) return false;
+  if(!navigator.onLine){
+    if(manuell) syncMeldung("Keine Verbindung — der Abgleich läuft, sobald das Gerät wieder online ist.", "warn");
+    return false;
+  }
+  syncLaeuft = true; syncFehler = ""; syncStatus();
+  if(manuell) syncMeldung("Gleiche ab …");
+  try{
+    for(let versuch = 0; versuch < 2; versuch++){
+      const fern = await gh("GET");
+      const geaendert = lokalGeaendert();
+
+      if(!fern){                                   // noch nie hochgeladen
+        sync.sha = null;
+        if(!(await hochladen())) continue;
+        break;
+      }
+      const datei = JSON.parse(new TextDecoder().decode(unb64(fern.content.replace(/\s/g, ""))));
+      if(fern.sha === sync.sha){                   // online steht unser eigener Stand
+        if(geaendert && !(await hochladen())) continue;
+        break;
+      }
+
+      // Online liegt der Stand eines anderen Geräts.
+      const fremd = await entschluesseln(datei);
+      const ersteVerbindung = !sync.sha;
+      const quelle = ((datei.meta && datei.meta.geraet) || "anderem Gerät") +
+                     (fremd.savedAt ? " (" + new Date(fremd.savedAt).toLocaleString("de-DE") + ")" : "");
+
+      if((!geaendert && !ersteVerbindung) || nichtsEigenes()){   // nichts zu verlieren: übernehmen
+        await vorherSichern();
+        sync.sha = fern.sha; sync.zuletzt = fremd.savedAt; syncSichern();
+        zustand = fremd;
+        tagIndexBauen(); allesZeichnen(); speichern();
+        await basisMerken(zustand);
+        syncMeldung("Stand von " + quelle + " übernommen.", "ok");
+        syncLaeuft = false; syncStatus();
+        return true;
+      }
+
+      const basis = ersteVerbindung ? null : await kvHolen("basis");
+      const z = zusammenfuehren(basis, zerlegen(zustand), zerlegen(fremd));
+      if(z.konflikte.length){
+        const onlineGewinnt = confirm(
+          (ersteVerbindung || !basis
+            ? "Dieses Gerät und der Online-Stand unterscheiden sich"
+            : "Auf beiden Geräten wurden dieselben Einträge geändert") + ":\n\n" +
+          konfliktText(z.konflikte) + "\n\nOnline = " + quelle + "." +
+          (z.vonOnline + z.vonHier
+            ? "\nDie übrigen Änderungen (" + z.vonHier + " von hier, " + z.vonOnline +
+              " von online) werden ohnehin zusammengeführt."
+            : "") +
+          "\n\nOK = für diese Einträge den Online-Stand nehmen" +
+          "\nAbbrechen = für diese Einträge den Stand dieses Geräts behalten");
+        if(onlineGewinnt){
+          z.konflikte.forEach(c => {
+            if(c.online === undefined) delete z.erg[c.bereich][c.k];
+            else z.erg[c.bereich][c.k] = c.online;
+          });
+        }
+      }
+      if(z.vonOnline || z.konflikte.length){
+        await vorherSichern();
+        const vereint = zusammensetzen(z.erg);
+        if(vereint){
+          zustand = vereint;
+          tagIndexBauen(); allesZeichnen(); speichern();
+        }
+      }
+      sync.sha = fern.sha; syncSichern();
+      if(!(await hochladen())) continue;
+      syncMeldung("Zusammengeführt mit " + quelle + ": " + z.vonHier + " von hier, " +
+                  z.vonOnline + " von online" +
+                  (z.konflikte.length ? ", " + z.konflikte.length + " nach Rückfrage" : "") + ".", "ok");
+      syncLaeuft = false; syncStatus();
+      return true;
+    }
+    syncMeldung("Online abgeglichen" +
+                (sync.zuletzt ? ": " + new Date(sync.zuletzt).toLocaleString("de-DE") : "") + ".", "ok");
+  }catch(err){
+    syncFehler = err && err.message ? err.message : "unbekannter Fehler";
+    syncMeldung("Online-Abgleich: " + syncFehler, "warn");
+  }
+  syncLaeuft = false; syncStatus();
+  return !syncFehler;
+}
+
+/* ------------------------------------------------------------
+   Ereignisse
+   ------------------------------------------------------------ */
+elRaster.addEventListener("mousedown", ev => {
+  if(ev.button !== 0) return;                       // Rechtsklick ist die Notiz
+  const z = ev.target.closest(".tag");
+  if(!z) return;
+  ev.preventDefault();
+  notizSchliessen();
+  merken();                                         // ein Strich = ein Schritt
+  maltGerade = true;
+  strichBeginnen(z.dataset.datum);
+  malen(z.dataset.datum);
+});
+elRaster.addEventListener("mouseover", ev => {
+  if(!maltGerade) return;
+  const z = ev.target.closest(".tag");
+  if(z) malen(z.dataset.datum);
+});
+elRaster.addEventListener("contextmenu", ev => {
+  const z = ev.target.closest(".tag");
+  if(!z) return;
+  ev.preventDefault();
+  notizOeffnen(z.dataset.datum, ev.pageX, ev.pageY);
+});
+elRaster.addEventListener("dragstart", ev => ev.preventDefault());
+document.addEventListener("mouseup", () => {
+  if(!maltGerade) return;
+  maltGerade = false;
+  strichBeenden();
+  bilanzZeichnen();
+  hinweiseZeichnen();
+  schulfreiZeichnen();
+  reisenZeichnen();
+  termineZeichnen();
+  speichernGeplant();
+});
+
+document.getElementById("notizOk").addEventListener("click", () => {
+  notizUebernehmen(document.getElementById("notizText").value.trim());
+});
+document.getElementById("notizWeg").addEventListener("click", () => notizUebernehmen(""));
+document.getElementById("notizAbbruch").addEventListener("click", notizSchliessen);
+document.getElementById("notizText").addEventListener("keydown", ev => {
+  if(ev.key === "Enter") notizUebernehmen(ev.target.value.trim());
+  if(ev.key === "Escape") notizSchliessen();
+});
+document.addEventListener("mousedown", ev => {
+  if(elNotizBox.classList.contains("an") && !elNotizBox.contains(ev.target)) notizSchliessen();
+});
+
+document.getElementById("schalterLuecken").addEventListener("change", ev => {
+  zustand.settings.luckenanalyseAktiv = ev.target.checked;
+  zellenNeuZeichnen();
+  speichernGeplant();
+});
+/* ---- Phase 3: Jahreswechsel, Feriendaten, Druck ---- */
+document.getElementById("jahrWahl").addEventListener("change", ev => {
+  if(ev.target.value === "andere"){
+    const eingabe = prompt("Welches Planjahr?", String(zustand.settings.aktivesJahr + 1));
+    jahrWechseln(eingabe === null ? zustand.settings.aktivesJahr : eingabe);
+  }else{
+    jahrWechseln(ev.target.value);
+  }
+});
+document.getElementById("btnFerienApi").addEventListener("click", () => {
+  ferienNachladen(zustand.settings.aktivesJahr, true);
+});
+document.getElementById("btnFerienEigen").addEventListener("click", () => {
+  ferienFormOffen = !ferienFormOffen;
+  ferienZeichnen();
+  if(ferienFormOffen) document.getElementById("ferienName").focus();
+});
+document.getElementById("btnFerien").addEventListener("click", ferienHinzufuegen);
+document.getElementById("btnRueckgaengig").addEventListener("click", rueckgaengig);
+document.addEventListener("keydown", ev => {
+  const tippt = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName);
+  if((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z" && !ev.shiftKey && !tippt){
+    ev.preventDefault();
+    rueckgaengig();
+  }
+});
+document.getElementById("btnDruck").addEventListener("click", () => {
+  notizSchliessen();
+  window.print();
+});
+
+document.getElementById("btnTermin").addEventListener("click", terminHinzufuegen);
+document.getElementById("terminName").addEventListener("keydown", ev => {
+  if(ev.key === "Enter") terminHinzufuegen();
+});
+document.getElementById("btnSchulfrei").addEventListener("click", schulfreiHinzufuegen);
+document.getElementById("schulfreiName").addEventListener("keydown", ev => {
+  if(ev.key === "Enter") schulfreiHinzufuegen();
+});
+
+document.getElementById("feldKind").addEventListener("change", ev => {
+  merken();
+  zustand.settings.kind = ev.target.value.trim() || "das Kind";
+  kopfZeichnen(); hinweiseZeichnen(); speichernGeplant();
+});
+document.getElementById("feldOrt").addEventListener("change", ev => {
+  merken();
+  zustand.settings.ort = ev.target.value.trim();
+  kopfZeichnen(); speichernGeplant();
+});
+
+document.getElementById("syncSave").addEventListener("click", () => {
+  const repo  = document.getElementById("syncRepo").value.trim()
+                  .replace(/^https?:\/\/github\.com\//, "").replace(/\.git$|\/$/g, "");
+  const token = document.getElementById("syncToken").value.trim();
+  const pw    = document.getElementById("syncPw").value;
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){
+    syncMeldung("Das Repo bitte als „besitzer/name“ angeben.", "warn"); return;
+  }
+  if(!token || pw.length < 8){
+    syncMeldung("Token und ein Passwort mit mindestens 8 Zeichen eintragen.", "warn"); return;
+  }
+  // Anderes Ziel oder anderes Passwort: der Abgleich beginnt von vorn. Den
+  // SHA zu vergessen erzwingt die Rückfrage, statt still zu überschreiben.
+  if(repo !== sync.repo || pw !== sync.pw) sync = { repo:repo, token:token, pw:pw };
+  else sync.token = token;
+  syncSichern();
+  abgleichen(true);
+});
+document.getElementById("syncNow").addEventListener("click", () => abgleichen(true));
+document.getElementById("syncBtn").addEventListener("click", () => {
+  if(!syncAktiv()){
+    document.getElementById("syncRepo").focus();
+    syncMeldung("Repo, Token und Passwort eintragen, dann „Verbinden“.", "warn");
+    return;
+  }
+  abgleichen(true);
+});
+document.getElementById("syncVorher").addEventListener("click", async () => {
+  const v = await kvHolen("vorher");
+  if(!v) return;
+  if(!confirm("Den Stand von vor dem Abgleich am " +
+              new Date(v.zeit).toLocaleString("de-DE") +
+              " zurückholen? Der aktuelle Stand wird ersetzt.")) return;
+  const geprueft = uebernehmen(v.stand);
+  if(!geprueft){ syncMeldung("Die Sicherheitskopie ist unlesbar.", "warn"); return; }
+  merken();
+  zustand = geprueft;
+  tagIndexBauen(); allesZeichnen(); speichern();
+  syncMeldung("Stand von vor dem Abgleich zurückgeholt. „Jetzt abgleichen“ schickt ihn online.", "ok");
+});
+window.addEventListener("online",  syncStatus);
+window.addEventListener("offline", syncStatus);
+
+document.getElementById("btnExport").addEventListener("click", exportieren);
+document.getElementById("btnImport").addEventListener("click", () => {
+  document.getElementById("dateiImport").click();
+});
+document.getElementById("dateiImport").addEventListener("change", ev => {
+  const datei = ev.target.files && ev.target.files[0];
+  if(datei) importieren(datei);
+  ev.target.value = "";
+});
+window.addEventListener("beforeunload", () => {
+  clearTimeout(speicherTimer);
+  speichern();
+});
+
+/* ------------------------------------------------------------
+   Start
+   ------------------------------------------------------------ */
+speicherVerfuegbar = speicherPruefen();
+warnungAnzeigen();
+laden();
+tagIndexBauen();
+allesZeichnen();
+
+document.getElementById("syncRepo").value  = sync.repo  || "";
+document.getElementById("syncToken").value = sync.token || "";
+document.getElementById("syncPw").value    = sync.pw    || "";
+syncStatus();
+syncVorherZeichnen();
+if(syncAktiv()){
+  syncMeldung("Zuletzt abgeglichen" +
+              (sync.zuletzt ? ": " + new Date(sync.zuletzt).toLocaleString("de-DE") : " — noch nie") + ".");
+  abgleichen(false);   // beim Start einmal nachsehen, ob ein anderes Gerät etwas geschickt hat
+}
+</script>
+</body>
+</html>

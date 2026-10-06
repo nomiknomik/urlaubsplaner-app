@@ -173,18 +173,19 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    Schluss ("Garda…"), senkrecht steht der Name vollständig da. Die Höhe setzt
    das Skript am ersten Tag des Blocks, der Text zentriert sich darin. */
 .tag .notiz{
-  position:absolute;right:9px;top:2px;width:14px;z-index:3;
+  position:absolute;right:9px;top:2px;width:auto;max-width:36px;z-index:3;
   writing-mode:vertical-rl;text-orientation:mixed;
-  display:block;line-height:14px;text-align:center;pointer-events:none;
+  display:block;line-height:12px;text-align:center;pointer-events:none;
   font-size:10px;color:#46423A;letter-spacing:.01em;
-  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  /* Passt der Titel nicht in eine Spalte, bricht er zentriert um (bis zu drei). */
+  overflow:hidden;white-space:normal;overflow-wrap:break-word;
 }
 /* Ein einzelner Tag ist nur 26 px hoch — senkrecht blieben davon drei Zeichen.
    Solche Notizen laufen quer über die ganze Zelle, auch über die Balken, und
    brechen auf zwei Zeilen um. Ein weißer Schein hält sie auf den Balken lesbar. */
 .tag .notiz.quer{
   writing-mode:horizontal-tb;
-  left:2px;right:2px;width:auto;top:50%;bottom:auto;transform:translateY(-50%);
+  left:2px;right:2px;width:auto;max-width:none;top:50%;bottom:auto;transform:translateY(-50%);
   display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
   white-space:normal;overflow-wrap:anywhere;
   line-height:11px;max-height:22px;text-align:center;font-size:10px;
@@ -401,7 +402,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
   .tagnummer{font-size:7px;padding-top:1px}
   .tag{height:5.6mm}
   .tag .wt{font-size:7px}
-  .tag .notiz{font-size:6.5px;line-height:9px;width:9px;right:6px;top:1px}
+  .tag .notiz{font-size:6.5px;line-height:8px;max-width:24px;right:6px;top:1px}
   .tag .notiz.quer{line-height:7px;max-height:14px;left:1px;right:1px;font-size:6.5px}
   .tag .terminspur{width:5px}
   .tag .terminspur i{width:3px;right:1px}
@@ -678,7 +679,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
-const APP_VERSION = "3.3";      // bei jeder ausgelieferten Änderung erhöhen
+const APP_VERSION = "3.4";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];

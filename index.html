@@ -74,30 +74,44 @@ header h1 small{font-weight:400;color:var(--text-schwach);font-size:13px;margin-
 
 /* ---------- Layout ---------- */
 main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
-#rasterBereich{flex:1 1 auto;min-width:0}
+/* Das Raster scrollt in einem eigenen Fenster: nur so können Monatszeile
+   (oben) und Tagesspalte (links) gleichzeitig kleben, auch wenn das Raster
+   vergrößert breiter als der Bildschirm ist. --kopfH setzt das Skript auf die
+   Höhe des klebenden Kopfbereichs. */
+#rasterBereich{
+  flex:1 1 auto;min-width:0;overflow:auto;overscroll-behavior:contain;
+  max-height:calc(100vh - var(--kopfH, 120px) - 40px);
+  border:1px solid var(--linie);border-radius:8px;
+  /* bleibt stehen, während die längere Seitenleiste daneben scrollt */
+  position:sticky;top:calc(var(--kopfH, 120px) + 20px);
+}
 
 /* ---------- Jahresraster ---------- */
 #raster{
   display:grid;grid-template-columns:30px repeat(12,minmax(0,1fr));
-  gap:1px;background:var(--linie);border:1px solid var(--linie);
-  border-radius:8px;overflow:hidden;user-select:none;
+  gap:1px;background:var(--linie);user-select:none;
+  /* Zoom (Strg + Mausrad): --z skaliert Zeilenhöhe und, ab 100 %, die Breite. */
+  --z:1; width:calc(100% * max(1, var(--z)));
   /* Spurraster der Balken. --spuren setzt das Skript auf die Zahl der
      Ressourcen, damit das Balkenfeld mitwächst; --zeile ist die Höhe einer
      Rasterzeile samt Fuge und bemisst die senkrechten Beschriftungen. */
-  --spuren:5; --spur:9px; --balken:8px; --zeile:27px;
+  --spuren:5; --spur:9px; --balken:8px; --zeile:calc(26px * var(--z) + 1px);
   --feld:calc(3px + var(--spuren) * var(--spur));
 }
 .kopfzelle{
   font-size:12px;font-weight:600;text-align:center;padding:6px 0;
   background:#F3F0EA;color:var(--text-schwach);
+  position:sticky;top:0;z-index:6;box-shadow:0 1px 0 var(--linie);
 }
 .tagnummer{
   font-size:11px;color:var(--text-schwach);text-align:center;
   padding-top:5px;background:#F3F0EA;
+  position:sticky;left:0;z-index:5;box-shadow:1px 0 0 var(--linie);
 }
+.kopfzelle.ecke{left:0;z-index:7}
 .leer{background:#F7F5F1}
 .tag{
-  position:relative;height:26px;padding-left:var(--feld);
+  position:relative;height:calc(26px * var(--z));padding-left:var(--feld);
   display:flex;align-items:center;justify-content:center;cursor:crosshair;
   background:var(--tag-schule);
 }
@@ -388,7 +402,9 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
   header{grid-area:kopf;padding:0 0 2mm;border-bottom:1px solid var(--linie);gap:8px}
   header h1{font-size:13px}
   header h1 small{font-size:9px;margin-left:6px}
-  #rasterBereich{grid-area:raster;min-width:0}
+  #rasterBereich{grid-area:raster;min-width:0;overflow:visible;max-height:none;border:0;position:static}
+  #raster{--z:1 !important;width:auto;border:1px solid var(--linie)}
+  .kopfzelle,.tagnummer{position:static;box-shadow:none}
   #seitenleiste{grid-area:rand;flex:none;width:auto;gap:2.5mm}
   #legende{grid-area:legende;margin:2.5mm 0 0;padding:2mm 2.5mm;max-width:none}
 
@@ -679,7 +695,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
-const APP_VERSION = "3.4";      // bei jeder ausgelieferten Änderung erhöhen
+const APP_VERSION = "3.5";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -1578,7 +1594,7 @@ function rasterBauen(){
   for(const k in zellen) delete zellen[k];
 
   const ecke = document.createElement("div");
-  ecke.className = "kopfzelle";
+  ecke.className = "kopfzelle ecke";
   elRaster.appendChild(ecke);
   MONATE.forEach(m => {
     const k = document.createElement("div");
@@ -3176,6 +3192,41 @@ document.getElementById("btnDruck").addEventListener("click", () => {
   notizSchliessen();
   window.print();
 });
+
+/* ------------------------------------------------------------
+   Zoom des Jahresrasters: Strg (Mac: ⌘) + Mausrad über dem Raster, auch die
+   Zwei-Finger-Geste am Trackpad. Der Punkt unter dem Mauszeiger bleibt stehen.
+   Die Stufe gilt je Gerät und liegt deshalb nicht im Plan.
+   ------------------------------------------------------------ */
+const LS_ZOOM = "urlaubsplaner.zoom";
+const ZOOM_MIN = 0.7, ZOOM_MAX = 3;
+let zoom = 1;
+try{ zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(localStorage.getItem(LS_ZOOM)) || 1)); }catch(e){}
+function zoomSetzen(z, x, y){
+  const bereich = document.getElementById("rasterBereich");
+  const vorherB = elRaster.scrollWidth, vorherH = elRaster.scrollHeight;
+  const ankerX = bereich.scrollLeft + x, ankerY = bereich.scrollTop + y;
+  zoom = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) * 100) / 100;
+  elRaster.style.setProperty("--z", zoom);
+  bereich.scrollLeft = ankerX * elRaster.scrollWidth  / vorherB - x;
+  bereich.scrollTop  = ankerY * elRaster.scrollHeight / vorherH - y;
+  try{ localStorage.setItem(LS_ZOOM, String(zoom)); }catch(e){}
+}
+document.getElementById("rasterBereich").addEventListener("wheel", ev => {
+  if(!ev.ctrlKey && !ev.metaKey) return;
+  ev.preventDefault();               // sonst zoomt der Browser die ganze Seite
+  const r = ev.currentTarget.getBoundingClientRect();
+  zoomSetzen(zoom * Math.exp(-ev.deltaY * 0.0012), ev.clientX - r.left, ev.clientY - r.top);
+}, { passive:false });
+elRaster.style.setProperty("--z", zoom);
+
+/* Höhe des klebenden Kopfes — das Rasterfenster füllt den Rest des Bildschirms. */
+function kopfHoeheSetzen(){
+  document.documentElement.style.setProperty("--kopfH",
+    document.getElementById("kopfbereich").offsetHeight + "px");
+}
+if(window.ResizeObserver) new ResizeObserver(kopfHoeheSetzen).observe(document.getElementById("kopfbereich"));
+kopfHoeheSetzen();
 
 /* ------------------------------------------------------------
    Version und Update. GitHub Pages lässt Browser die Seite bis zu zehn

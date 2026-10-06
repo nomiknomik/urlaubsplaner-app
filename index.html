@@ -678,7 +678,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
-const APP_VERSION = "3.1";      // bei jeder ausgelieferten Änderung erhöhen
+const APP_VERSION = "3.2";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -1252,24 +1252,23 @@ function malen(datum){
   }
 
   if(pinsel === "radieren"){
-    // Radiert werden die Ressourcen; eine Notiz bleibt stehen, bis sie über das
-    // Notizfeld entfernt wird. War auf dem Tag keine Ressource, ist als Nächstes
+    // Radiert werden die Ressourcen samt Notiz. War auf dem Tag nichts eingetragen, ist als Nächstes
     // ein selbst gemalter Ferientag dran — so löscht ein Radierstrich nie
     // versehentlich die Betreuungspflicht unter einem Urlaubstag weg.
     // Radiert wird von oben nach unten: erst die Ressourcen, dann ein selbst
     // gemalter Ferientag, zuletzt ein Termin. So löscht ein Strich nie
     // versehentlich mehrere Ebenen auf einmal.
-    const hatteRessourcen = freiAm(datum).length > 0;
-    if(e[datum]){
-      e[datum].frei = [];
-      if(!notizVon(datum)) delete e[datum];
-    }
-    if(!hatteRessourcen && !schulfreiRadieren(datum) && terminRadieren(datum)) zelleNachbarnZeichnen(datum);
-    else if(!hatteRessourcen) zelleZeichnen(datum);
+    // Der Eintrag geht samt Beschriftung: ein Reisename ohne Urlaub darunter
+    // wäre ein Überbleibsel, das niemand mehr zuordnen kann.
+    const hatteEintrag = !!e[datum];
+    if(hatteEintrag) delete e[datum];
+    if(!hatteEintrag && !schulfreiRadieren(datum) && terminRadieren(datum)) zelleNachbarnZeichnen(datum);
+    else if(!hatteEintrag) zelleZeichnen(datum);
   }else if(strichModus === "entfernen"){
     if(e[datum] && Array.isArray(e[datum].frei)){
       e[datum].frei = e[datum].frei.filter(id => id !== pinsel);
-      if(!e[datum].frei.length && !notizVon(datum)) delete e[datum];
+      // Mit dem letzten Balken verschwindet auch die Beschriftung.
+      if(!e[datum].frei.length) delete e[datum];
     }
   }else{
     if(!e[datum]) e[datum] = { frei:[] };
@@ -3101,6 +3100,9 @@ document.addEventListener("mouseup", () => {
   if(!maltGerade) return;
   maltGerade = false;
   strichBeenden();
+  // Eine weggenommene Beschriftung ändert die Höhe des Blocktitels, der weit
+  // über dem radierten Tag stehen kann — deshalb das ganze Raster.
+  zellenNeuZeichnen();
   bilanzZeichnen();
   hinweiseZeichnen();
   schulfreiZeichnen();

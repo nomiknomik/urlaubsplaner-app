@@ -117,6 +117,8 @@ main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
   position:sticky;left:0;z-index:5;box-shadow:1px 0 0 var(--linie);
 }
 .kopfzelle.ecke{left:0;z-index:7}
+/* Fadenkreuz wie in Excel: Tag und Monat des Tages unter der Maus hervorheben. */
+.tagnummer.aktiv,.kopfzelle.aktiv{background:var(--akzent);color:#fff;font-weight:700}
 .leer{background:#F7F5F1}
 .tag{
   position:relative;height:calc(26px * var(--z));padding-left:var(--feld);
@@ -125,6 +127,7 @@ main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
 }
 .tag .wt{font-size:10px;color:#9A948A;pointer-events:none}
 .tag.we{background:var(--tag-we)}
+.tag.we .wt{font-weight:700;color:#5F5A50}
 .tag.feiertag{background:var(--tag-feiertag)}
 .tag.schulfrei{background:var(--tag-frei)}
 .tag.heute{outline:2px solid var(--akzent);outline-offset:-2px;z-index:1}
@@ -752,7 +755,7 @@ main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
-const APP_VERSION = "3.10";      // bei jeder ausgelieferten Änderung erhöhen
+const APP_VERSION = "3.11";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -3381,6 +3384,20 @@ elRaster.addEventListener("mouseover", ev => {
   const z = ev.target.closest(".tag");
   if(z) malen(z.dataset.datum);
 });
+let fadenkreuz = [];
+function fadenkreuzWeg(){ fadenkreuz.forEach(e => e.classList.remove("aktiv")); fadenkreuz = []; }
+elRaster.addEventListener("mouseover", ev => {
+  const z = ev.target.closest(".tag");
+  if(!z) return;
+  const [, m, t] = z.dataset.datum.split("-").map(Number);
+  const nr = elRaster.querySelectorAll(".tagnummer")[t - 1];
+  const kopf = elRaster.querySelectorAll(".kopfzelle:not(.ecke)")[m - 1];
+  if(fadenkreuz[0] === nr && fadenkreuz[1] === kopf) return;
+  fadenkreuzWeg();
+  fadenkreuz = [nr, kopf].filter(Boolean);
+  fadenkreuz.forEach(e => e.classList.add("aktiv"));
+});
+elRaster.addEventListener("mouseleave", fadenkreuzWeg);
 elRaster.addEventListener("contextmenu", ev => {
   const z = ev.target.closest(".tag");
   if(!z) return;

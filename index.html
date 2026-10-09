@@ -220,10 +220,8 @@ main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
   font-size:min(var(--notizF), calc(12px * var(--z)));line-height:1em;max-height:2em;text-align:center;
   text-shadow:0 0 2px #fff,0 0 2px #fff,0 0 3px #fff;
 }
-/* Der Wochentag bleibt neben senkrechten Titeln stehen. Eine Quer-Notiz läuft
-   über die ganze Zelle — dort steht der Wochentag vorn im Text („Mi · …“). */
-.tag:has(> .notiz.quer) .wt{display:none}
-.tag .notiz.quer::before{content:attr(data-wt) " · ";font-weight:400;font-style:normal;color:#8A847A}
+/* Der Wochentag bleibt immer im Hintergrund stehen; Notizen liegen mit weißem
+   Schein darüber. */
 
 /* Besondere Termine (Fortbildung, Kongress, Dienstreise): ein schraffierter
    Streifen am rechten Zellenrand in der Farbe der Person. Schraffiert statt
@@ -759,7 +757,7 @@ main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
-const APP_VERSION = "3.12";      // bei jeder ausgelieferten Änderung erhöhen
+const APP_VERSION = "3.13";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -1891,7 +1889,6 @@ function rasterBauen(){
       z.innerHTML = '<span class="wt"></span><span class="balken"></span>' +
                     '<span class="notiz"></span><span class="terminspur"></span>';
       z.querySelector(".wt").textContent = WOCHENTAGE[d.getDay()];
-      z.querySelector(".notiz").dataset.wt = WOCHENTAGE[d.getDay()];
       if(datum === heute) z.classList.add("heute");
       elRaster.appendChild(z);
       zellen[datum] = z;

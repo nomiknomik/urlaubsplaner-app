@@ -73,7 +73,9 @@ header h1 small{font-weight:400;color:var(--text-schwach);font-size:13px;margin-
 }
 
 /* ---------- Layout ---------- */
-main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
+/* Das Raster nimmt die ganze Breite; die Seitenleiste schrumpft auf schmalen
+   Bildschirmen (MacBook) mit, damit das Jahr möglichst viel Platz bekommt. */
+main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
 /* Das Raster scrollt in einem eigenen Fenster: nur so können Monatszeile
    (oben) und Tagesspalte (links) gleichzeitig kleben, auch wenn das Raster
    vergrößert breiter als der Bildschirm ist. --kopfH setzt das Skript auf die
@@ -97,6 +99,10 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
      Rasterzeile samt Fuge und bemisst die senkrechten Beschriftungen. */
   --spuren:5; --spur:9px; --balken:8px; --zeile:calc(26px * var(--z) + 1px);
   --feld:calc(3px + var(--spuren) * var(--spur));
+  /* Beschriftungen wachsen mit der Rasterbreite (auch beim Zoom):
+     11 px auf schmalen Bildschirmen bis 13 px auf breiten. */
+  container-type:inline-size;
+  --notizF:clamp(11px, 3px + .8cqi, 13px);
 }
 .kopfzelle{
   font-size:12px;font-weight:600;text-align:center;padding:6px 0;
@@ -138,7 +144,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
 .balken i{position:absolute;width:var(--balken);z-index:2;background:var(--f)}
 
 /* ---------- Seitenleiste ---------- */
-#seitenleiste{flex:0 0 268px;display:flex;flex-direction:column;gap:14px}
+#seitenleiste{flex:0 0 clamp(240px, 18vw, 268px);min-width:0;display:flex;flex-direction:column;gap:14px}
 .karte{background:var(--flaeche);border:1px solid var(--linie);border-radius:8px;padding:14px 15px}
 .karte h2{
   font-size:11px;letter-spacing:.09em;text-transform:uppercase;
@@ -162,7 +168,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
 
 /* ---------- Legende ---------- */
 #legende{margin:0 20px 24px;padding:14px 15px;background:var(--flaeche);
-  border:1px solid var(--linie);border-radius:8px;max-width:1500px}
+  border:1px solid var(--linie);border-radius:8px;max-width:2200px}
 #legende h2{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
   color:var(--text-schwach);margin:0 0 10px;font-weight:600}
 .legende-liste{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:13px}
@@ -187,10 +193,10 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    Schluss ("Garda…"), senkrecht steht der Name vollständig da. Die Höhe setzt
    das Skript am ersten Tag des Blocks, der Text zentriert sich darin. */
 .tag .notiz{
-  position:absolute;right:9px;top:2px;width:auto;max-width:36px;z-index:3;
+  position:absolute;right:9px;top:2px;width:auto;max-width:3.6em;z-index:3;
   writing-mode:vertical-rl;text-orientation:mixed;
-  display:block;line-height:12px;text-align:center;pointer-events:none;
-  font-size:10px;color:#46423A;letter-spacing:.01em;
+  display:block;line-height:1.2em;text-align:center;pointer-events:none;
+  font-size:var(--notizF);color:#46423A;letter-spacing:.01em;
   /* Passt der Titel nicht in eine Spalte, bricht er zentriert um (bis zu drei). */
   overflow:hidden;white-space:normal;overflow-wrap:break-word;
 }
@@ -202,7 +208,8 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
   left:2px;right:2px;width:auto;max-width:none;top:50%;bottom:auto;transform:translateY(-50%);
   display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
   white-space:normal;overflow-wrap:anywhere;
-  line-height:11px;max-height:22px;text-align:center;font-size:10px;
+  /* quer höchstens 12 px, damit zwei Zeilen in die 26-px-Zelle passen */
+  font-size:min(var(--notizF), 12px);line-height:1em;max-height:2em;text-align:center;
   text-shadow:0 0 2px #fff,0 0 2px #fff,0 0 3px #fff;
 }
 .tag.mit-notiz .wt{display:none}
@@ -265,7 +272,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
 .reihe input{
   min-width:0;padding:3px 6px;border:1px solid var(--linie-stark);border-radius:4px;background:var(--bg);
 }
-.reihe input[type=date]{flex:0 0 auto}
+.reihe input[type=date]{flex:1 1 0;min-width:0}
 .reihe input[type=text]{flex:1 1 auto}
 .btn.mini{padding:4px 10px;font-size:12.5px}
 
@@ -741,7 +748,7 @@ main{display:flex;align-items:flex-start;gap:20px;padding:20px;max-width:1500px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
-const APP_VERSION = "3.6";      // bei jeder ausgelieferten Änderung erhöhen
+const APP_VERSION = "3.7";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];

@@ -48,6 +48,12 @@ header h1 small{font-weight:400;color:var(--text-schwach);font-size:13px;margin-
   border-bottom:1px solid #E8B4AE;color:#7E2A2A;font-size:13px;
 }
 #speicherWarnung.an{display:block}
+#umzugBanner{display:none;background:#E3F1EB;border-bottom:1px solid var(--akzent);padding:8px 14px;font-size:14px}
+#umzugBanner.an{display:block}
+#umzugBanner a{color:var(--akzent);font-weight:bold}
+#umzugDialog{border:1px solid var(--linie-stark);border-radius:8px;padding:18px 20px;max-width:420px}
+#umzugDialog::backdrop{background:rgba(40,36,30,.55)}
+#umzugDialog h2{font-size:16px;margin:0 0 8px}
 #speicherWarnung b{color:var(--warn)}
 
 /* ---------- Werkzeugleiste ---------- */
@@ -507,6 +513,11 @@ main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
 
 <div id="kopfbereich">
 
+<div id="umzugBanner" class="nicht-drucken">
+  <b>Der Urlaubsplaner ist umgezogen:</b> <a id="umzugLink" href="#" target="_blank" rel="noopener">neuen Urlaubsplaner öffnen</a>.
+  Diese Version ist nur noch lesbar — Änderungen werden hier nicht mehr gespeichert.
+</div>
+
 <div id="speicherWarnung">
   <b>Achtung:</b> Dieser Browser speichert für diese Datei nichts dauerhaft
   (localStorage nicht verfügbar). Alle Eingaben gehen beim Schließen verloren —
@@ -689,6 +700,14 @@ main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
         <button class="btn mini" id="syncNow">Jetzt abgleichen</button>
         <button class="btn mini" id="syncVorher" hidden>Stand vor dem Abgleich</button>
       </div>
+      <div class="knopfreihe">
+        <button class="btn mini" id="umzugLos">Auf den neuen Urlaubsplaner umziehen</button>
+      </div>
+      <p class="fussnote" id="umzugMsg">
+        Öffnet den neuen Urlaubsplaner (Cloudflare) in einem eigenen Fenster und
+        übergibt ihm den Stand dieses Geräts direkt im Browser. Danach ist diese
+        Version auf allen Geräten nur noch lesbar.
+      </p>
       <p class="fussnote">
         Legt eine <b>verschlüsselte</b> Datei in einem <b>privaten</b> GitHub-Repo ab
         und gleicht sie zwischen deinen Geräten ab. Token und Passwort bleiben nur
@@ -751,6 +770,17 @@ main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
   </div>
 </dialog>
 
+<dialog id="umzugDialog" class="nicht-drucken">
+  <h2>Der Urlaubsplaner ist umgezogen</h2>
+  <p>Der Plan liegt jetzt im neuen Urlaubsplaner mit eigener Anmeldung. Diese
+     Version ist nur noch lesbar.</p>
+  <p id="umzugDialogText" class="fussnote"></p>
+  <div class="knopfreihe">
+    <a class="btn" id="umzugDialogLink" href="#" target="_blank" rel="noopener">Neuen Urlaubsplaner öffnen</a>
+    <button class="btn" id="umzugDialogZu" type="button">Nur ansehen</button>
+  </div>
+</dialog>
+
 <script>
 "use strict";
 
@@ -759,7 +789,7 @@ main{display:flex;align-items:flex-start;gap:16px;padding:20px;max-width:2200px}
    Single-File, keine Abhängigkeiten. Datenmodell siehe KONZEPT.md §3.
    ============================================================ */
 
-const APP_VERSION = "3.14";      // bei jeder ausgelieferten Änderung erhöhen
+const APP_VERSION = "3.15";      // bei jeder ausgelieferten Änderung erhöhen
 const SCHEMA_VERSION = 1;
 const SPEICHER_SCHLUESSEL = "urlaubsplaner.v1";
 const MONATE = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
@@ -1417,6 +1447,7 @@ function speichernGeplant(){
   speicherTimer = setTimeout(speichern, 350);
 }
 function speichern(){
+  if(umzug){ umzugZeigen(true); return; }     // umgezogen: nur noch lesen
   if(!speicherVerfuegbar) return;
   try{
     zustand.savedAt = new Date().toISOString();
@@ -3022,7 +3053,8 @@ async function verschluesseln(stand){
                 new TextEncoder().encode(JSON.stringify(stand)));
   return {
     meta:{ app:"urlaubsplaner", schemaVersion:SCHEMA_VERSION, erstellt:new Date().toISOString(),
-           geraet:geraet(), jahre:Object.keys(stand.jahre || {}).sort() },
+           geraet:geraet(), jahre:Object.keys(stand.jahre || {}).sort(),
+           ...(umzug ? { umzug:umzug } : {}) },
     enc:{ alg:"AES-GCM-256", kdf:"PBKDF2-SHA256", iter:PBKDF2_ITER,
           salt:sync.salt, iv:b64(iv), data:b64(ct) }
   };
@@ -3217,6 +3249,7 @@ function konfliktText(konflikte){
 }
 
 async function hochladen(){
+  if(umzug && !umzugMarkieren) return true;   // umgezogen: hier nichts mehr hochladen
   const stand = JSON.parse(JSON.stringify(zustand));
   stand.savedAt = new Date().toISOString();
   const datei = await verschluesseln(stand);
@@ -3300,6 +3333,16 @@ async function abgleichen(manuell){
         break;
       }
       const datei = JSON.parse(new TextDecoder().decode(unb64(fern.content.replace(/\s/g, ""))));
+      if(datei.meta && datei.meta.umzug && !umzug){
+        // Ein anderes Gerät hat umgezogen: ab jetzt nur noch lesen.
+        const offen = lokalGeaendert() && !!sync.sha;
+        umzug = datei.meta.umzug;
+        umzugSichern();
+        umzugZeigen(true, offen
+          ? "Achtung: dieses Gerät hat Änderungen, die noch nicht übertragen wurden. " +
+            "In den Einstellungen „Auf den neuen Urlaubsplaner umziehen“ klicken – sie werden dort zusammengeführt."
+          : "");
+      }
       if(fern.sha === sync.sha){                   // online steht unser eigener Stand
         if(geaendert && !(await hochladen())) continue;
         break;
@@ -3369,11 +3412,78 @@ async function abgleichen(manuell){
   return !syncFehler;
 }
 
+/* ============================================================
+   Umzug auf den neuen Urlaubsplaner (Cloudflare Worker, eigene Anmeldung)
+   Die neue App wird mit #umzug geöffnet, meldet sich per postMessage und
+   bekommt den entschlüsselten Stand dieses Geräts – nur an ihre Adresse.
+   Danach steht in der Online-Datei meta.umzug: alle anderen Geräte sehen
+   beim nächsten Abgleich den Hinweis und sind ebenfalls nur noch lesbar.
+   ============================================================ */
+let UMZUG_ZIEL = "https://urlaubsplaner.schuric.workers.dev/";
+const LS_UMZUG = "urlaubsplaner.umzug";       // {am, url}
+let umzug = (() => {
+  try{ return JSON.parse(window.localStorage.getItem(LS_UMZUG) || "null"); }catch(err){ return null; }
+})();
+let umzugMarkieren = false, umzugFenster = null;
+function umzugSichern(){
+  try{ window.localStorage.setItem(LS_UMZUG, JSON.stringify(umzug)); }catch(err){}
+}
+function umzugZeigen(dialog, text){
+  if(!umzug) return;
+  const url = umzug.url || UMZUG_ZIEL;
+  document.getElementById("umzugBanner").classList.add("an");
+  document.getElementById("umzugLink").href = url;
+  document.getElementById("umzugDialogLink").href = url;
+  if(text !== undefined) document.getElementById("umzugDialogText").textContent = text;
+  const d = document.getElementById("umzugDialog");
+  if(dialog && !d.open) d.showModal();
+}
+async function umzugStarten(){
+  const msg = document.getElementById("umzugMsg");
+  if(syncAktiv() && !umzug){
+    msg.textContent = "Hole zuerst den aktuellen Online-Stand …";
+    const ok = await abgleichen(true);
+    if(!ok && !confirm("Der Online-Abgleich hat nicht geklappt. Trotzdem mit dem Stand dieses Geräts umziehen?")) return;
+  }
+  umzugFenster = window.open(UMZUG_ZIEL + "#umzug", "urlaubsplaner_neu");
+  if(!umzugFenster){ msg.textContent = "Das Fenster wurde blockiert – bitte Pop-ups für diese Seite erlauben."; return; }
+  msg.textContent = "Im neuen Fenster anmelden (beim ersten Mal: Konto mit Einrichtungscode anlegen). " +
+                    "Die Daten werden danach automatisch übertragen.";
+}
+window.addEventListener("message", async ev => {
+  const m = ev.data;
+  if(!m || ev.origin !== new URL(UMZUG_ZIEL).origin) return;
+  const msg = document.getElementById("umzugMsg");
+  if(m.typ === "urlaubsplaner-umzug-bereit"){
+    ev.source.postMessage({ typ:"urlaubsplaner-umzug-daten",
+                            zustand:JSON.parse(JSON.stringify(zustand)) }, ev.origin);
+    msg.textContent = "Daten übergeben – der neue Urlaubsplaner speichert sie …";
+  }else if(m.typ === "urlaubsplaner-umzug-fehler"){
+    msg.textContent = "Umzug fehlgeschlagen: " + (m.text || "unbekannter Fehler") + ". Diese Version bleibt unverändert.";
+  }else if(m.typ === "urlaubsplaner-umzug-fertig"){
+    const erstmals = !umzug;
+    umzug = { am:new Date().toISOString(), url:m.url || UMZUG_ZIEL };
+    umzugSichern();
+    if(erstmals && syncAktiv()){
+      umzugMarkieren = true;                  // Markierung für die anderen Geräte
+      try{
+        if(!(await hochladen())){ umzug = null; await abgleichen(false);
+                                  umzug = { am:new Date().toISOString(), url:m.url || UMZUG_ZIEL };
+                                  umzugSichern(); await hochladen(); }
+      }catch(err){ /* Markierung fehlt online – die anderen Geräte bekommen den Hinweis dann nicht */ }
+      umzugMarkieren = false;
+    }
+    msg.textContent = "Umzug abgeschlossen.";
+    umzugZeigen(true, "Umzug abgeschlossen – ab jetzt bitte nur noch den neuen Urlaubsplaner benutzen.");
+  }
+});
+
 /* ------------------------------------------------------------
    Ereignisse
    ------------------------------------------------------------ */
 elRaster.addEventListener("mousedown", ev => {
   if(ev.button !== 0) return;                       // Rechtsklick ist die Notiz
+  if(umzug){ umzugZeigen(true); return; }
   const z = ev.target.closest(".tag");
   if(!z) return;
   ev.preventDefault();
@@ -3612,6 +3722,8 @@ document.getElementById("syncSave").addEventListener("click", () => {
   abgleichen(true);
 });
 document.getElementById("syncNow").addEventListener("click", () => abgleichen(true));
+document.getElementById("umzugLos").addEventListener("click", umzugStarten);
+document.getElementById("umzugDialogZu").addEventListener("click", () => document.getElementById("umzugDialog").close());
 document.getElementById("syncBtn").addEventListener("click", () => {
   if(!syncAktiv()){
     document.getElementById("syncRepo").focus();
@@ -3671,6 +3783,7 @@ document.getElementById("syncToken").value = sync.token || "";
 document.getElementById("syncPw").value    = sync.pw    || "";
 syncStatus();
 syncVorherZeichnen();
+umzugZeigen(true);
 if(syncAktiv()){
   syncMeldung("Zuletzt abgeglichen" +
               (sync.zuletzt ? ": " + new Date(sync.zuletzt).toLocaleString("de-DE") : " — noch nie") + ".");
